@@ -158,6 +158,23 @@ CREATE TABLE IF NOT EXISTS ticket_comments (
   CONSTRAINT fk_ticket_comments_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS ticket_assignees (
+  ticket_id BIGINT UNSIGNED NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  assigned_by BIGINT UNSIGNED NOT NULL,
+  status_code VARCHAR(50) NOT NULL DEFAULT 'ASSIGNED',
+  accepted_at DATETIME NULL,
+  resolved_at DATETIME NULL,
+  resolution TEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (ticket_id, user_id),
+  CONSTRAINT fk_ticket_assignees_ticket FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+  CONSTRAINT fk_ticket_assignees_user FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_ticket_assignees_assigned_by FOREIGN KEY (assigned_by) REFERENCES users(id),
+  INDEX idx_ticket_assignees_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS ticket_attachments (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   ticket_id BIGINT UNSIGNED NOT NULL,

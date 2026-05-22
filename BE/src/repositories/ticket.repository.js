@@ -5,9 +5,32 @@ const ticketSelect = `
         t.*,
         requester.full_name AS requester_name,
         requester.email AS requester_email,
-        assignee.full_name AS assigned_to_name,
+        COALESCE((
+            SELECT GROUP_CONCAT(assigned_user.full_name ORDER BY ta.created_at, assigned_user.full_name SEPARATOR ', ')
+            FROM ticket_assignees ta
+            INNER JOIN users assigned_user ON assigned_user.id = ta.user_id
+            WHERE ta.ticket_id = t.id
+        ), assignee.full_name) AS assigned_to_name,
         assignee.email AS assigned_to_email,
         assigner.full_name AS assigned_by_name,
+        COALESCE((
+            SELECT GROUP_CONCAT(ta.user_id ORDER BY ta.created_at, assigned_user.full_name)
+            FROM ticket_assignees ta
+            INNER JOIN users assigned_user ON assigned_user.id = ta.user_id
+            WHERE ta.ticket_id = t.id
+        ), CAST(t.assigned_to AS CHAR)) AS assigned_support_ids,
+        COALESCE((
+            SELECT GROUP_CONCAT(assigned_user.full_name ORDER BY ta.created_at, assigned_user.full_name SEPARATOR ', ')
+            FROM ticket_assignees ta
+            INNER JOIN users assigned_user ON assigned_user.id = ta.user_id
+            WHERE ta.ticket_id = t.id
+        ), assignee.full_name) AS assigned_support_names,
+        COALESCE((
+            SELECT GROUP_CONCAT(CONCAT(ta.user_id, ':', ta.status_code) ORDER BY ta.created_at, assigned_user.full_name SEPARATOR ',')
+            FROM ticket_assignees ta
+            INNER JOIN users assigned_user ON assigned_user.id = ta.user_id
+            WHERE ta.ticket_id = t.id
+        ), IF(t.assigned_to IS NULL, NULL, CONCAT(t.assigned_to, ':ASSIGNED'))) AS assigned_support_statuses,
         s.code AS service_code,
         s.name AS service_name,
         c.code AS service_category_code,
@@ -53,8 +76,16 @@ const appendFilters = (filters = {}) => {
     }
 
     if (filters.assignedTo) {
-        conditions.push('t.assigned_to = ?');
-        params.push(filters.assignedTo);
+        conditions.push(`(
+            t.assigned_to = ?
+            OR EXISTS (
+                SELECT 1
+                FROM ticket_assignees ta_filter
+                WHERE ta_filter.ticket_id = t.id
+                  AND ta_filter.user_id = ?
+            )
+        )`);
+        params.push(filters.assignedTo, filters.assignedTo);
     }
 
     if (filters.managerUserId) {
@@ -101,7 +132,11 @@ const appendFilters = (filters = {}) => {
     }
 
     if (filters.unassigned) {
-        conditions.push('t.assigned_to IS NULL');
+        conditions.push(`t.assigned_to IS NULL AND NOT EXISTS (
+            SELECT 1
+            FROM ticket_assignees ta_filter
+            WHERE ta_filter.ticket_id = t.id
+        )`);
     }
 
     if (filters.overdue) {
@@ -182,6 +217,81 @@ const updateRequesterTicket = async (id, data) => updateTicket(id, {
     due_response_at: data.due_response_at,
     due_resolve_at: data.due_resolve_at
 });
+
+const replaceTicketAssignees = async (ticketId, supportIds, assignedBy, ticketData = {}) => db.transaction(async (connection) => {
+    const payload = Object.fromEntries(
+        Object.entries(ticketData).filter(([, value]) => value !== undefined)
+    );
+    const columns = Object.keys(payload);
+
+    if (columns.length > 0) {
+        const setClause = columns.map((column) => `${column} = ?`).join(', ');
+        await connection.execute(
+            `UPDATE tickets SET ${setClause} WHERE id = ?`,
+            [...Object.values(payload), ticketId]
+        );
+    }
+
+    await connection.execute('DELETE FROM ticket_assignees WHERE ticket_id = ?', [ticketId]);
+
+    for (const supportId of supportIds) {
+        await connection.execute(
+            'INSERT INTO ticket_assignees (ticket_id, user_id, assigned_by) VALUES (?, ?, ?)',
+            [ticketId, supportId, assignedBy]
+        );
+    }
+});
+
+const getTicketAssignees = (ticketId) => db.query(`
+    SELECT
+        ta.*,
+        u.full_name,
+        u.email
+    FROM ticket_assignees ta
+    INNER JOIN users u ON u.id = ta.user_id
+    WHERE ta.ticket_id = ?
+    ORDER BY ta.created_at, u.full_name
+`, [ticketId]);
+
+const updateTicketAssigneeStatus = async (ticketId, userId, statusCode, data = {}) => {
+    const payload = Object.fromEntries(
+        Object.entries({
+            status_code: statusCode,
+            accepted_at: data.accepted_at,
+            resolved_at: data.resolved_at,
+            resolution: data.resolution
+        }).filter(([, value]) => value !== undefined)
+    );
+    const columns = Object.keys(payload);
+    const setClause = columns.map((column) => `${column} = ?`).join(', ');
+
+    return db.query(
+        `UPDATE ticket_assignees SET ${setClause} WHERE ticket_id = ? AND user_id = ?`,
+        [...Object.values(payload), ticketId, userId]
+    );
+};
+
+const updateAllTicketAssigneeStatuses = async (ticketId, statusCode, data = {}) => {
+    const payload = Object.fromEntries(
+        Object.entries({
+            status_code: statusCode,
+            accepted_at: data.accepted_at,
+            resolved_at: data.resolved_at,
+            resolution: data.resolution
+        }).filter(([, value]) => value !== undefined)
+    );
+    const columns = Object.keys(payload);
+    const setClause = columns.map((column) => `${column} = ?`).join(', ');
+
+    if (columns.length === 0) {
+        return { affectedRows: 0 };
+    }
+
+    return db.query(
+        `UPDATE ticket_assignees SET ${setClause} WHERE ticket_id = ?`,
+        [...Object.values(payload), ticketId]
+    );
+};
 
 const getDefaultStatus = async () => {
     const rows = await db.query('SELECT * FROM ticket_statuses WHERE is_default = 1 LIMIT 1');
@@ -408,6 +518,10 @@ module.exports = {
     createTicket,
     updateTicket,
     updateRequesterTicket,
+    replaceTicketAssignees,
+    getTicketAssignees,
+    updateTicketAssigneeStatus,
+    updateAllTicketAssigneeStatuses,
     getDefaultStatus,
     getStatusByCode,
     getStatusById,

@@ -5,6 +5,7 @@ const ticketController = require('../controllers/ticket.controller');
 const authMiddleware = require('../middlewares/auth.middleware');
 const roleMiddleware = require('../middlewares/role.middleware');
 const upload = require('../middlewares/upload.middleware');
+const { aiSuggestionRateLimit } = require('../middlewares/rate-limit.middleware');
 
 const {
     validateCreateTicket,
@@ -135,6 +136,12 @@ router.post(
 router.get(
     '/:id/attachments',
     ticketController.getAttachments
+);
+
+router.post(
+    '/:id/ai-suggestions',
+    aiSuggestionRateLimit,
+    ticketController.generateAiSuggestion
 );
 
 router.post(

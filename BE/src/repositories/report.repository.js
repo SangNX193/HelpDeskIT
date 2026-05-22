@@ -47,7 +47,12 @@ const buildTicketConditions = (filters = {}, ticketAlias = 't', dateAlias = tick
     }
 
     if (filters.supportId) {
-        conditions.push(`${ticketAlias}.assigned_to = ?`);
+        conditions.push(`EXISTS (
+            SELECT 1
+            FROM ticket_assignees ta_filter
+            WHERE ta_filter.ticket_id = ${ticketAlias}.id
+              AND ta_filter.user_id = ?
+        )`);
         params.push(filters.supportId);
     }
 
@@ -176,7 +181,8 @@ const getSupportPerformanceReport = (filters = {}) => {
             ROUND(AVG(f.rating), 2) AS avg_rating
         FROM users u
         INNER JOIN roles r ON r.id = u.role_id AND r.code = 'SUPPORT'
-        LEFT JOIN tickets t ON t.assigned_to = u.id ${joinClause}
+        LEFT JOIN ticket_assignees ta ON ta.user_id = u.id
+        LEFT JOIN tickets t ON t.id = ta.ticket_id ${joinClause}
         LEFT JOIN ticket_statuses st ON st.id = t.status_id
         LEFT JOIN ticket_feedback f ON f.ticket_id = t.id
         ${userConditions.length ? `WHERE ${userConditions.join(' AND ')}` : ''}

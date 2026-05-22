@@ -1,8 +1,10 @@
+const crypto = require('crypto');
 const path = require('path');
 
 const ticketRepository = require('../repositories/ticket.repository');
 const notificationRepository = require('../repositories/notification.repository');
 const authRepository = require('../repositories/auth.repository');
+const aiSuggestionService = require('./ai-suggestion.service');
 
 const httpError = (statusCode, message) => {
     const error = new Error(message);
@@ -51,9 +53,11 @@ const MAX_ROOM_LENGTH = 60;
 
 const generateTicketCode = () => {
     const now = new Date();
-    const date = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `HD${date}${random}`;
+    const part = (value) => String(value).padStart(2, '0');
+    const date = `${now.getFullYear()}${part(now.getMonth() + 1)}${part(now.getDate())}`;
+    const time = `${part(now.getHours())}${part(now.getMinutes())}${part(now.getSeconds())}`;
+    const suffix = crypto.randomBytes(2).toString('hex').toUpperCase();
+    return `HD${date}${time}${suffix}`;
 };
 
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
@@ -125,6 +129,39 @@ const resolveRoomLocation = async (payload) => {
     return room;
 };
 
+const positiveIds = (values = []) => [...new Set(values
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0))];
+
+const parseIdList = (value) => {
+    if (value === undefined || value === null) {
+        return [];
+    }
+
+    if (Array.isArray(value)) {
+        return positiveIds(value.flatMap((item) => parseIdList(item)));
+    }
+
+    return positiveIds(String(value).split(','));
+};
+
+const supportIdsFromPayload = (payload) => parseIdList(valueOf(
+    payload,
+    'supportIds',
+    'support_ids',
+    'supportId',
+    'support_id',
+    'assignedTo',
+    'assigned_to'
+));
+
+const assignedSupportIdsOf = (ticket = {}) => positiveIds([
+    ...parseIdList(ticket.assigned_support_ids),
+    ticket.assigned_to
+]);
+
+const assignedSupportNamesOf = (ticket = {}) => ticket.assigned_support_names || ticket.assigned_to_name || null;
+
 const ensureTicket = async (ticketId) => {
     const ticket = await ticketRepository.findById(ticketId);
     if (!ticket) {
@@ -148,7 +185,7 @@ const ensureAccess = async (ticket, user) => {
         return;
     }
 
-    if (role === 'SUPPORT' && Number(ticket.assigned_to) === Number(user.id)) {
+    if (role === 'SUPPORT' && assignedSupportIdsOf(ticket).includes(Number(user.id))) {
         return;
     }
 
@@ -249,6 +286,12 @@ const notifyUser = async (userId, title, message, type, ticketId) => {
     }
 };
 
+const notifyUsers = async (userIds, title, message, type, ticketId) => {
+    for (const userId of positiveIds(userIds)) {
+        await notifyUser(userId, title, message, type, ticketId);
+    }
+};
+
 const createTicket = async (payload, user) => {
     const serviceId = valueOf(payload, 'serviceId', 'service_id');
     const service = await ticketRepository.getServiceById(serviceId);
@@ -266,18 +309,31 @@ const createTicket = async (payload, user) => {
     const responseMinutes = sla ? sla.response_time_minutes : priority.response_time_minutes;
     const resolveMinutes = sla ? sla.resolve_time_minutes : priority.resolve_time_minutes;
 
-    const id = await ticketRepository.createTicket({
-        code: generateTicketCode(),
-        title,
-        description,
-        room,
-        requester_id: user.id,
-        service_id: service.id,
-        priority_id: priority.id,
-        status_id: status.id,
-        due_response_at: addMinutes(responseMinutes),
-        due_resolve_at: addMinutes(resolveMinutes)
-    });
+    let id;
+    for (let attempt = 0; attempt < 3 && !id; attempt += 1) {
+        try {
+            id = await ticketRepository.createTicket({
+                code: generateTicketCode(),
+                title,
+                description,
+                room,
+                requester_id: user.id,
+                service_id: service.id,
+                priority_id: priority.id,
+                status_id: status.id,
+                due_response_at: addMinutes(responseMinutes),
+                due_resolve_at: addMinutes(resolveMinutes)
+            });
+        } catch (error) {
+            if (error.code !== 'ER_DUP_ENTRY' || !String(error.message || '').includes('code')) {
+                throw error;
+            }
+        }
+    }
+
+    if (!id) {
+        throw httpError(500, 'Khong the tao ma yeu cau duy nhat. Vui long thu lai.');
+    }
 
     await ticketRepository.addHistory({
         ticket_id: id,
@@ -388,32 +444,51 @@ const ensureSupportUser = async (supportId) => {
     return support;
 };
 
+const ensureSupportUsers = async (supportIds) => {
+    if (!supportIds.length) {
+        throw httpError(400, 'Vui lòng chọn ít nhất một nhân viên IT');
+    }
+
+    const supports = [];
+    for (const supportId of supportIds) {
+        supports.push(await ensureSupportUser(supportId));
+    }
+
+    return supports;
+};
+
 const assignTicket = async (ticketId, payload, user) => {
     const ticket = await ensureTicket(ticketId);
     await ensureAccess(ticket, user);
     ensureNotFinal(ticket, 'phân công');
 
-    const supportId = valueOf(payload, 'supportId', 'support_id', 'assignedTo', 'assigned_to');
-    const support = await ensureSupportUser(supportId);
-    if (!await ticketRepository.userHasRoomAccess(support.id, ticket.room)) {
-        throw httpError(400, 'Nhân viên IT chưa được phân công hỗ trợ tòa của yêu cầu này');
+    const supports = await ensureSupportUsers(supportIdsFromPayload(payload));
+    for (const support of supports) {
+        if (!await ticketRepository.userHasRoomAccess(support.id, ticket.room)) {
+            throw httpError(400, `${support.full_name} chưa được phân công hỗ trợ tòa của yêu cầu này`);
+        }
     }
+
+    const primarySupport = supports[0];
+    const nextSupportIds = supports.map((support) => support.id);
+    const nextSupportNames = supports.map((support) => support.full_name).join(', ');
+    const previousSupportNames = assignedSupportNamesOf(ticket);
     const assignedStatus = await resolveStatus({ statusCode: 'ASSIGNED' });
     const updateData = {
-        assigned_to: support.id,
+        assigned_to: primarySupport.id,
         assigned_by: user.id
     };
 
-    if (ticket.status_code === 'NEW') {
+    if (ticket.status_code !== 'ASSIGNED') {
         updateData.status_id = assignedStatus.id;
     }
 
-    await ticketRepository.updateTicket(ticketId, updateData);
+    await ticketRepository.replaceTicketAssignees(ticketId, nextSupportIds, user.id, updateData);
 
     await ticketRepository.addAssignmentHistory({
         ticket_id: ticketId,
         from_support_id: ticket.assigned_to,
-        to_support_id: support.id,
+        to_support_id: primarySupport.id,
         assigned_by: user.id,
         note: valueOf(payload, 'note')
     });
@@ -421,14 +496,14 @@ const assignTicket = async (ticketId, payload, user) => {
     await ticketRepository.addHistory({
         ticket_id: ticketId,
         user_id: user.id,
-        action: ticket.assigned_to ? 'REASSIGN' : 'ASSIGN',
-        from_value: ticket.assigned_to_name,
-        to_value: support.full_name,
+        action: assignedSupportIdsOf(ticket).length ? 'REASSIGN' : 'ASSIGN',
+        from_value: previousSupportNames,
+        to_value: nextSupportNames,
         note: valueOf(payload, 'note')
     });
 
-    await notifyUser(support.id, 'Yêu cầu được phân công', `Yêu cầu ${ticket.code} đã được phân công cho bạn`, 'ASSIGNMENT', ticketId);
-    await notifyUser(ticket.requester_id, 'Yêu cầu đã được phân công', `Yêu cầu ${ticket.code} đã được phân công cho ${support.full_name}`, 'ASSIGNMENT', ticketId);
+    await notifyUsers(nextSupportIds, 'Yêu cầu được phân công', `Yêu cầu ${ticket.code} đã được phân công cho bạn`, 'ASSIGNMENT', ticketId);
+    await notifyUser(ticket.requester_id, 'Yêu cầu đã được phân công', `Yêu cầu ${ticket.code} đã được phân công cho ${nextSupportNames}`, 'ASSIGNMENT', ticketId);
 
     return ticketRepository.findById(ticketId);
 };
@@ -455,11 +530,32 @@ const updatePriority = async (ticketId, payload, user) => {
     return ticketRepository.findById(ticketId);
 };
 
-const updateStatus = async (ticketId, payload, user) => {
-    const ticket = await ensureTicket(ticketId);
-    await ensureAccess(ticket, user);
+const assigneeStatusData = (statusCode, payload = {}) => {
+    const now = toMysqlDate(new Date());
 
-    const status = await resolveStatus(payload);
+    if (statusCode === 'IN_PROGRESS') {
+        return { accepted_at: now };
+    }
+
+    if (statusCode === 'RESOLVED') {
+        return {
+            resolved_at: now,
+            resolution: valueOf(payload, 'resolution', 'note')
+        };
+    }
+
+    return {};
+};
+
+const syncAssigneesForDirectStatus = async (ticketId, statusCode, payload) => {
+    if (!['ASSIGNED', 'IN_PROGRESS', 'WAITING_FOR_USER', 'RESOLVED'].includes(statusCode)) {
+        return;
+    }
+
+    await ticketRepository.updateAllTicketAssigneeStatuses(ticketId, statusCode, assigneeStatusData(statusCode, payload));
+};
+
+const applyTicketStatus = async (ticket, status, payload, user, options = {}) => {
     ensureTransition(ticket, status.code, user);
 
     const data = { status_id: status.id };
@@ -481,9 +577,13 @@ const updateStatus = async (ticketId, payload, user) => {
         data.cancelled_reason = valueOf(payload, 'reason', 'cancelledReason', 'cancelled_reason');
     }
 
-    await ticketRepository.updateTicket(ticketId, data);
+    if (options.syncAssignees !== false) {
+        await syncAssigneesForDirectStatus(ticket.id, status.code, payload);
+    }
+
+    await ticketRepository.updateTicket(ticket.id, data);
     await ticketRepository.addHistory({
-        ticket_id: ticketId,
+        ticket_id: ticket.id,
         user_id: user.id,
         action: 'UPDATE_STATUS',
         from_value: ticket.status_code,
@@ -491,17 +591,107 @@ const updateStatus = async (ticketId, payload, user) => {
         note: valueOf(payload, 'note', 'resolution', 'reason')
     });
 
-    await notifyUser(ticket.requester_id, 'Trạng thái yêu cầu đã thay đổi', `Yêu cầu ${ticket.code} đã chuyển sang ${status.name}`, 'STATUS', ticketId);
+    await notifyUser(ticket.requester_id, 'Trạng thái yêu cầu đã thay đổi', `Yêu cầu ${ticket.code} đã chuyển sang ${status.name}`, 'STATUS', ticket.id);
 
-    return ticketRepository.findById(ticketId);
+    return ticketRepository.findById(ticket.id);
 };
 
-const startTicket = (ticketId, user) => updateStatus(ticketId, { statusCode: 'IN_PROGRESS' }, user);
+const supportWorkflowStatus = async (ticket, payload, user, nextStatusCode, options = {}) => {
+    if (roleOf(user) !== 'SUPPORT') {
+        throw httpError(403, 'Chỉ nhân viên IT được thực hiện thao tác này');
+    }
 
-const resolveTicket = (ticketId, payload, user) => updateStatus(ticketId, {
-    statusCode: 'RESOLVED',
-    resolution: valueOf(payload, 'resolution', 'note')
-}, user);
+    if (!options.allowedTicketStatuses.includes(ticket.status_code)) {
+        throw httpError(400, options.invalidMessage);
+    }
+
+    const assignees = await ticketRepository.getTicketAssignees(ticket.id);
+    const assignee = assignees.find((item) => Number(item.user_id) === Number(user.id));
+    if (!assignee) {
+        throw httpError(403, 'Bạn không nằm trong danh sách nhân viên xử lý yêu cầu này');
+    }
+
+    if (assignee.status_code === nextStatusCode || assignee.status_code === 'RESOLVED') {
+        return ticketRepository.findById(ticket.id);
+    }
+
+    if (options.allowedAssigneeStatuses && !options.allowedAssigneeStatuses.includes(assignee.status_code)) {
+        throw httpError(400, options.invalidAssigneeMessage || 'Trạng thái xử lý của bạn chưa phù hợp để thực hiện thao tác này');
+    }
+
+    await ticketRepository.updateTicketAssigneeStatus(ticket.id, user.id, nextStatusCode, assigneeStatusData(nextStatusCode, payload));
+    await ticketRepository.addHistory({
+        ticket_id: ticket.id,
+        user_id: user.id,
+        action: options.historyAction,
+        from_value: assignee.status_code,
+        to_value: nextStatusCode,
+        note: valueOf(payload, 'note', 'resolution') || options.historyNote
+    });
+
+    const latestAssignees = await ticketRepository.getTicketAssignees(ticket.id);
+    const allSameStatus = latestAssignees.length > 0 && latestAssignees.every((item) => item.status_code === nextStatusCode);
+
+    if (!allSameStatus || ticket.status_code === nextStatusCode) {
+        return ticketRepository.findById(ticket.id);
+    }
+
+    const status = await resolveStatus({ statusCode: nextStatusCode });
+    return applyTicketStatus(ticket, status, payload, user, { syncAssignees: false });
+};
+
+const updateStatus = async (ticketId, payload, user) => {
+    const ticket = await ensureTicket(ticketId);
+    await ensureAccess(ticket, user);
+
+    const status = await resolveStatus(payload);
+
+    if (roleOf(user) === 'SUPPORT' && status.code === 'WAITING_FOR_USER') {
+        return supportWorkflowStatus(ticket, payload, user, 'WAITING_FOR_USER', {
+            allowedTicketStatuses: ['IN_PROGRESS'],
+            allowedAssigneeStatuses: ['IN_PROGRESS'],
+            invalidMessage: 'Chỉ chuyển sang chờ người dùng khi yêu cầu đang xử lý',
+            invalidAssigneeMessage: 'Bạn cần tiếp nhận xử lý trước khi chuyển sang chờ người dùng',
+            historyAction: 'SUPPORT_WAITING',
+            historyNote: 'Nhân viên IT chờ người dùng bổ sung'
+        });
+    }
+
+    return applyTicketStatus(ticket, status, payload, user);
+};
+
+const startTicket = async (ticketId, user) => {
+    const ticket = await ensureTicket(ticketId);
+    await ensureAccess(ticket, user);
+    ensureNotFinal(ticket, 'tiếp nhận');
+
+    return supportWorkflowStatus(ticket, { statusCode: 'IN_PROGRESS' }, user, 'IN_PROGRESS', {
+        allowedTicketStatuses: ['ASSIGNED', 'WAITING_FOR_USER', 'IN_PROGRESS'],
+        allowedAssigneeStatuses: ['ASSIGNED', 'WAITING_FOR_USER'],
+        invalidMessage: 'Chỉ tiếp nhận yêu cầu khi đã phân công hoặc đang chờ người dùng',
+        invalidAssigneeMessage: 'Bạn đã tiếp nhận hoặc hoàn tất yêu cầu này',
+        historyAction: 'SUPPORT_START',
+        historyNote: 'Nhân viên IT đã tiếp nhận xử lý'
+    });
+};
+
+const resolveTicket = async (ticketId, payload, user) => {
+    const ticket = await ensureTicket(ticketId);
+    await ensureAccess(ticket, user);
+    ensureNotFinal(ticket, 'hoàn tất');
+
+    return supportWorkflowStatus(ticket, {
+        statusCode: 'RESOLVED',
+        resolution: valueOf(payload, 'resolution', 'note')
+    }, user, 'RESOLVED', {
+        allowedTicketStatuses: ['IN_PROGRESS'],
+        allowedAssigneeStatuses: ['IN_PROGRESS'],
+        invalidMessage: 'Chỉ hoàn tất yêu cầu khi yêu cầu đang xử lý',
+        invalidAssigneeMessage: 'Bạn cần tiếp nhận xử lý trước khi hoàn tất',
+        historyAction: 'SUPPORT_RESOLVE',
+        historyNote: 'Nhân viên IT đã hoàn tất phần xử lý'
+    });
+};
 
 const cancelTicket = async (ticketId, payload, user) => {
     const ticket = await ensureTicket(ticketId);
@@ -539,8 +729,8 @@ const addComment = async (ticketId, payload, user) => {
     });
 
     const role = roleOf(user);
-    if (role === 'REQUESTER' && ticket.assigned_to) {
-        await notifyUser(ticket.assigned_to, 'Người dùng phản hồi mới', `Yêu cầu ${ticket.code} có phản hồi mới từ người dùng`, 'COMMENT', ticketId);
+    if (role === 'REQUESTER' && assignedSupportIdsOf(ticket).length) {
+        await notifyUsers(assignedSupportIdsOf(ticket), 'Người dùng phản hồi mới', `Yêu cầu ${ticket.code} có phản hồi mới từ người dùng`, 'COMMENT', ticketId);
     } else if (role !== 'REQUESTER') {
         await notifyUser(ticket.requester_id, 'Nhân viên IT phản hồi mới', `Yêu cầu ${ticket.code} có phản hồi mới từ nhân viên IT`, 'COMMENT', ticketId);
     }
@@ -594,6 +784,24 @@ const getAttachments = async (ticketId, user) => {
     const ticket = await ensureTicket(ticketId);
     await ensureAccess(ticket, user);
     return ticketRepository.getAttachments(ticketId);
+};
+
+const generateAiSuggestion = async (ticketId, user) => {
+    const ticket = await ensureTicket(ticketId);
+    await ensureAccess(ticket, user);
+
+    const attachments = await ticketRepository.getAttachments(ticketId);
+    const result = await aiSuggestionService.generateSuggestion({ ticket, attachments });
+
+    await ticketRepository.addHistory({
+        ticket_id: ticketId,
+        user_id: user.id,
+        action: 'AI_SUGGESTION',
+        to_value: result.provider,
+        note: `Tạo gợi ý AI bằng ${result.model}`
+    });
+
+    return result;
 };
 
 const addFeedback = async (ticketId, payload, user) => {
@@ -670,6 +878,7 @@ module.exports = {
     getComments,
     uploadAttachment,
     getAttachments,
+    generateAiSuggestion,
     addFeedback,
     getTicketHistory,
     getAssignmentHistory

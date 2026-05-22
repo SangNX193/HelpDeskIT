@@ -39,7 +39,7 @@ function LoginPage() {
                         <input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Nhập email của bạn" />
                     </Field>
                     <Field label="Mật khẩu">
-                        <input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Nhập mật khẩu" />
+                        <PasswordInput value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Nhập mật khẩu" autoComplete="current-password" />
                     </Field>
                     <button className="btn primary" disabled={loading}>{loading ? "Đang đăng nhập..." : "Đăng nhập"}</button>
                     <div className="card" style={{ fontSize: 13 }}>

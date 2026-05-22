@@ -49,8 +49,8 @@ function ProfilePage() {
                 </Section>
                 <Section title="Đổi mật khẩu">
                     <form className="form" onSubmit={submit}>
-                        <Field label="Mật khẩu hiện tại"><input className="input" type="password" value={password.currentPassword} onChange={(e) => setPassword({ ...password, currentPassword: e.target.value })} required /></Field>
-                        <Field label="Mật khẩu mới"><input className="input" type="password" value={password.newPassword} onChange={(e) => setPassword({ ...password, newPassword: e.target.value })} required /></Field>
+                        <Field label="Mật khẩu hiện tại"><PasswordInput value={password.currentPassword} onChange={(e) => setPassword({ ...password, currentPassword: e.target.value })} autoComplete="current-password" required /></Field>
+                        <Field label="Mật khẩu mới"><PasswordInput value={password.newPassword} onChange={(e) => setPassword({ ...password, newPassword: e.target.value })} autoComplete="new-password" required /></Field>
                         <button className="btn primary">Đổi mật khẩu</button>
                     </form>
                 </Section>
@@ -143,8 +143,8 @@ function ProfileEditorPage() {
                 </Section>
                 <Section title="Đổi mật khẩu">
                     <form className="form" onSubmit={submitPassword}>
-                        <Field label="Mật khẩu hiện tại"><input className="input" type="password" value={password.currentPassword} onChange={(event) => setPassword({ ...password, currentPassword: event.target.value })} required /></Field>
-                        <Field label="Mật khẩu mới"><input className="input" type="password" value={password.newPassword} onChange={(event) => setPassword({ ...password, newPassword: event.target.value })} required /></Field>
+                        <Field label="Mật khẩu hiện tại"><PasswordInput value={password.currentPassword} onChange={(event) => setPassword({ ...password, currentPassword: event.target.value })} autoComplete="current-password" required /></Field>
+                        <Field label="Mật khẩu mới"><PasswordInput value={password.newPassword} onChange={(event) => setPassword({ ...password, newPassword: event.target.value })} autoComplete="new-password" required /></Field>
                         <button className="btn primary">Đổi mật khẩu</button>
                     </form>
                 </Section>

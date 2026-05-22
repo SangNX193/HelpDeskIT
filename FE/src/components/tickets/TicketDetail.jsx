@@ -20,7 +20,8 @@ function TicketDetailPage() {
                         ["Ưu tiên", ticket.priority_name],
                         ["Người yêu cầu", ticket.requester_name],
                         ["Phòng cần hỗ trợ", ticket.room],
-                        ["Nhân viên xử lý", ticket.assigned_to_name || "Chưa phân công"],
+                        ["Nhân viên xử lý", ticket.assigned_support_names || ticket.assigned_to_name || "Chưa phân công"],
+                        ["Tiến độ nhân viên", <AssigneeProgress ticket={ticket} />],
                         ["Đánh giá", ticket.feedback_rating ? <RatingStars rating={ticket.feedback_rating} showValue /> : "Chưa đánh giá"],
                         ["Ngày tạo", formatDate(ticket.created_at)],
                         ["SLA xử lý", formatDate(ticket.due_resolve_at)]
@@ -51,6 +52,7 @@ function TicketDetailPage() {
                     </div>
                 </Section>
             </div>
+            <AiSuggestionPanel ticket={ticket} attachments={attachments} />
             {(user.role_code === "MANAGER" || user.role_code === "ADMIN") && !isClosed(ticket) && <ManagerTicketPanel ticket={ticket} refresh={refresh} />}
             {editing && (
                 <TicketEditModal
@@ -63,6 +65,62 @@ function TicketDetailPage() {
                 />
             )}
         </>
+    );
+}
+
+function AiSuggestionPanel({ ticket, attachments = [] }) {
+    const toast = useToast();
+    const [loading, setLoading] = React.useState(false);
+    const [result, setResult] = React.useState(null);
+    const [error, setError] = React.useState("");
+    const imageCount = attachments.filter(isImageAttachment).length;
+
+    const generate = async () => {
+        setLoading(true);
+        setError("");
+        try {
+            const response = await api.post(`/tickets/${ticket.id}/ai-suggestions`);
+            setResult(response.data.data);
+            toast("Đã tạo gợi ý AI", "success");
+        } catch (err) {
+            const message = errorMessage(err);
+            setError(message);
+            toast(message, "error");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Section title="Gợi ý AI">
+            <div className="ai-suggestion-panel">
+                <div className="ai-suggestion-toolbar">
+                    <div className="ai-suggestion-meta">
+                        <Badge value={`${attachments.length} file`} type="primary" />
+                        {imageCount > 0 && <Badge value={`${imageCount} ảnh`} type="success" />}
+                    </div>
+                    <button className="btn primary" type="button" onClick={generate} disabled={loading}>
+                        <Icon name={loading ? "hourglass_top" : "auto_awesome"} />
+                        {loading ? "Đang tạo..." : result ? "Tạo lại gợi ý" : "Tạo gợi ý AI"}
+                    </button>
+                </div>
+                {error && <div className="ai-suggestion-error">{error}</div>}
+                {result && (
+                    <div className="ai-suggestion-result">
+                        <div className="ai-suggestion-result-head">
+                            <span>{result.provider} / {result.model}</span>
+                            <span>{formatDate(result.generated_at)}</span>
+                        </div>
+                        <div className="ai-suggestion-content">{result.suggestion}</div>
+                        {result.attachments_used?.length > 0 && (
+                            <div className="ai-suggestion-files">
+                                {result.attachments_used.map((name) => <Badge key={name} value={name} type="success" />)}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </Section>
     );
 }
 
@@ -207,11 +265,20 @@ function TicketActions({ ticket, refresh, onEdit }) {
     }
 
     if (user.role_code === "SUPPORT") {
+        const myStatus = currentAssigneeStatus(ticket, user);
+        const canAccept = ["ASSIGNED", "WAITING_FOR_USER", "IN_PROGRESS"].includes(ticket.status_code) && !["IN_PROGRESS", "RESOLVED"].includes(myStatus);
+        const canWork = ticket.status_code === "IN_PROGRESS" && myStatus === "IN_PROGRESS";
+        const waitingForTeamStart = ticket.status_code === "ASSIGNED" && myStatus === "IN_PROGRESS";
+        const waitingForTeamResolve = ticket.status_code === "IN_PROGRESS" && myStatus === "RESOLVED";
+
         return (
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
-                {["ASSIGNED", "WAITING_FOR_USER"].includes(ticket.status_code) && <button className="btn primary" disabled={loading} onClick={() => run("Đã tiếp nhận yêu cầu", () => api.put(`/tickets/${ticket.id}/start`))}>Tiếp nhận</button>}
-                {ticket.status_code === "IN_PROGRESS" && <button className="btn ghost" disabled={loading} onClick={() => run("Đã chuyển sang chờ người dùng", () => api.put(`/tickets/${ticket.id}/status`, { statusCode: "WAITING_FOR_USER", note: "Cần người dùng bổ sung thông tin" }))}>Chờ người dùng bổ sung</button>}
-                {ticket.status_code === "IN_PROGRESS" && <button className="btn primary" disabled={loading} onClick={() => run("Đã hoàn tất xử lý", () => api.put(`/tickets/${ticket.id}/resolve`, { resolution: "Nhân viên IT đã xử lý xong" }))}>Hoàn tất xử lý</button>}
+                <Badge value={`Bạn: ${assigneeStatusLabel(myStatus)}`} type={assigneeStatusType(myStatus)} />
+                {canAccept && <button className="btn primary" disabled={loading} onClick={() => run("Đã ghi nhận tiếp nhận", () => api.put(`/tickets/${ticket.id}/start`))}>Tiếp nhận</button>}
+                {canWork && <button className="btn ghost" disabled={loading} onClick={() => run("Đã ghi nhận chờ người dùng", () => api.put(`/tickets/${ticket.id}/status`, { statusCode: "WAITING_FOR_USER", note: "Cần người dùng bổ sung thông tin" }))}>Chờ người dùng bổ sung</button>}
+                {canWork && <button className="btn primary" disabled={loading} onClick={() => run("Đã ghi nhận hoàn tất", () => api.put(`/tickets/${ticket.id}/resolve`, { resolution: "Nhân viên IT đã xử lý xong" }))}>Hoàn tất xử lý</button>}
+                {waitingForTeamStart && <span className="muted" style={{ alignSelf: "center", fontWeight: 800 }}>Đã tiếp nhận, chờ các nhân viên còn lại</span>}
+                {waitingForTeamResolve && <span className="muted" style={{ alignSelf: "center", fontWeight: 800 }}>Đã hoàn tất phần của bạn, chờ các nhân viên còn lại</span>}
             </div>
         );
     }
@@ -301,20 +368,103 @@ function FeedbackModal({ ticket, onClose, onSubmitted }) {
     );
 }
 
+const assigneeIdsFromTicket = (ticket = {}) => {
+    const rawIds = ticket.assigned_support_ids || ticket.assigned_to || "";
+    return [...new Set(String(rawIds).split(",")
+        .map((value) => value.trim())
+        .filter(Boolean))];
+};
+
+const assigneeStatusLabel = (statusCode) => ({
+    ASSIGNED: "Chưa tiếp nhận",
+    IN_PROGRESS: "Đang xử lý",
+    WAITING_FOR_USER: "Chờ người dùng",
+    RESOLVED: "Đã hoàn thành"
+}[statusCode] || statusCode || "Chưa tiếp nhận");
+
+const assigneeStatusType = (statusCode) => ({
+    ASSIGNED: "status-assigned",
+    IN_PROGRESS: "status-in-progress",
+    WAITING_FOR_USER: "status-waiting-for-user",
+    RESOLVED: "status-resolved"
+}[statusCode] || "primary");
+
+const assigneeStatusMapFromTicket = (ticket = {}) => {
+    const pairs = String(ticket.assigned_support_statuses || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+    return pairs.reduce((map, pair) => {
+        const [id, statusCode] = pair.split(":");
+        if (id) map[id] = statusCode || "ASSIGNED";
+        return map;
+    }, {});
+};
+
+const assigneeDetailsFromTicket = (ticket = {}) => {
+    const ids = assigneeIdsFromTicket(ticket);
+    const names = String(ticket.assigned_support_names || ticket.assigned_to_name || "")
+        .split(", ")
+        .map((name) => name.trim());
+    const statusMap = assigneeStatusMapFromTicket(ticket);
+
+    return ids.map((id, index) => ({
+        id,
+        name: names[index] || `Nhân viên #${id}`,
+        statusCode: statusMap[id] || "ASSIGNED"
+    }));
+};
+
+const currentAssigneeStatus = (ticket, user) => {
+    const statusMap = assigneeStatusMapFromTicket(ticket);
+    return statusMap[String(user?.id)] || "ASSIGNED";
+};
+
+function AssigneeProgress({ ticket }) {
+    const assignees = assigneeDetailsFromTicket(ticket);
+
+    if (!assignees.length) {
+        return "Chưa phân công";
+    }
+
+    return (
+        <div className="assignee-progress">
+            {assignees.map((assignee) => (
+                <span key={assignee.id} className="assignee-progress-item">
+                    <span>{assignee.name}</span>
+                    <Badge value={assigneeStatusLabel(assignee.statusCode)} type={assigneeStatusType(assignee.statusCode)} />
+                </span>
+            ))}
+        </div>
+    );
+}
+
 function ManagerTicketPanel({ ticket, refresh }) {
     const toast = useToast();
     const confirm = useConfirm();
     const supportUsersPath = `/support-users${ticket.room ? `?room=${encodeURIComponent(ticket.room)}` : ""}`;
     const { data: supportUsers } = useApi(supportUsersPath, []);
     const { data: priorities } = useApi("/priorities", []);
-    const [supportId, setSupportId] = React.useState("");
+    const [supportIds, setSupportIds] = React.useState(() => assigneeIdsFromTicket(ticket));
     const [priorityId, setPriorityId] = React.useState(ticket.priority_id || "");
 
+    React.useEffect(() => {
+        setSupportIds(assigneeIdsFromTicket(ticket));
+    }, [ticket.id, ticket.assigned_support_ids, ticket.assigned_to]);
+
+    const toggleSupport = (supportId) => {
+        const normalizedId = String(supportId);
+        setSupportIds((current) => current.includes(normalizedId)
+            ? current.filter((id) => id !== normalizedId)
+            : [...current, normalizedId]);
+    };
+
     const assign = async () => {
-        if (!supportId) return toast("Chọn nhân viên IT trước", "error");
+        if (!supportIds.length) return toast("Chọn nhân viên IT trước", "error");
         const ok = await confirm({ title: "Phân công yêu cầu", message: "Xác nhận phân công/tái phân công yêu cầu này?" });
         if (!ok) return;
-        await api.put(`/tickets/${ticket.id}/${ticket.assigned_to ? "reassign" : "assign"}`, { supportId });
+        await api.put(`/tickets/${ticket.id}/${assigneeIdsFromTicket(ticket).length ? "reassign" : "assign"}`, { supportIds });
         toast("Phân công thành công", "success");
         refresh();
     };
@@ -327,12 +477,23 @@ function ManagerTicketPanel({ ticket, refresh }) {
 
     return (
         <Section title="Điều phối của Quản lý/Quản trị">
-            <div className="form-grid">
-                <Field label="Nhân viên IT">
-                    <select className="select" value={supportId} onChange={(e) => setSupportId(e.target.value)}>
-                        <option value="">Chọn nhân viên</option>
-                        {supportUsers.map((user) => <option key={user.id} value={user.id}>{user.full_name}</option>)}
-                    </select>
+            <div className="form-grid ticket-dispatch-grid">
+                <Field label={`Nhân viên IT (${supportIds.length} đã chọn)`}>
+                    <div className="assignee-picker">
+                        {supportUsers.map((user) => {
+                            const checked = supportIds.includes(String(user.id));
+                            return (
+                                <label key={user.id} className={`assignee-choice ${checked ? "active" : ""}`}>
+                                    <span>
+                                        <strong>{user.full_name}</strong>
+                                        <small>{user.assigned_department_names || user.email}</small>
+                                    </span>
+                                    <input type="checkbox" checked={checked} onChange={() => toggleSupport(user.id)} />
+                                </label>
+                            );
+                        })}
+                        {supportUsers.length === 0 && <div className="empty">Chưa có nhân viên IT phù hợp</div>}
+                    </div>
                 </Field>
                 <Field label="Mức ưu tiên">
                     <select className="select" value={priorityId} onChange={(e) => setPriorityId(e.target.value)}>
@@ -341,7 +502,7 @@ function ManagerTicketPanel({ ticket, refresh }) {
                 </Field>
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-                <button className="btn primary" onClick={assign}>Phân công / Tái phân công</button>
+                <button className="btn primary" onClick={assign} disabled={!supportIds.length}>Phân công / Tái phân công</button>
                 <button className="btn ghost" onClick={updatePriority}>Cập nhật ưu tiên</button>
             </div>
         </Section>

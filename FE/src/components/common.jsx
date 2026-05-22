@@ -2,6 +2,35 @@ function Field({ label, children }) {
     return <label className="field"><span>{label}</span>{children}</label>;
 }
 
+function PasswordInput({ className = "", ...props }) {
+    const [visible, setVisible] = React.useState(false);
+    const label = visible ? "Ẩn mật khẩu" : "Hiện mật khẩu";
+
+    return (
+        <div className="password-field">
+            <input
+                {...props}
+                className={`input password-input ${className}`.trim()}
+                type={visible ? "text" : "password"}
+            />
+            <button
+                className="password-toggle"
+                type="button"
+                aria-label={label}
+                title={label}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setVisible((value) => !value);
+                }}
+            >
+                <Icon name={visible ? "visibility_off" : "visibility"} />
+            </button>
+        </div>
+    );
+}
+
 function PageHeader({ title, subtitle, action }) {
     return (
         <div className="toolbar">

@@ -182,12 +182,13 @@ const getUserDeleteReferences = async (id) => {
             (SELECT COUNT(*) FROM ticket_attachments WHERE uploaded_by = ?) AS attachments,
             (SELECT COUNT(*) FROM ticket_feedback WHERE user_id = ?) AS feedback,
             (SELECT COUNT(*) FROM ticket_history WHERE user_id = ?) AS history,
+            (SELECT COUNT(*) FROM ticket_assignees WHERE user_id = ?) AS ticket_assignees,
             (
                 SELECT COUNT(*)
                 FROM ticket_assignment_history
                 WHERE from_support_id = ? OR to_support_id = ? OR assigned_by = ?
             ) AS assignments
-    `, [id, id, id, id, id, id, id, id, id, id]);
+    `, [id, id, id, id, id, id, id, id, id, id, id]);
 
     return rows[0] || {};
 };

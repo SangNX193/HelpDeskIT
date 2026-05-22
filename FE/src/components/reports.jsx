@@ -187,7 +187,7 @@ function FeedbackDetailModal({ ticket, onClose }) {
                     ["Phòng", ticket.room],
                     ["Dịch vụ", ticket.service_name],
                     ["Trạng thái", ticket.status_name],
-                    ["Nhân viên xử lý", ticket.assigned_to_name || "Chưa phân công"],
+                    ["Nhân viên xử lý", ticket.assigned_support_names || ticket.assigned_to_name || "Chưa phân công"],
                     ["Ngày tạo", formatDate(ticket.created_at)]
                 ]} />
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>

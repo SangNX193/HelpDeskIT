@@ -601,9 +601,25 @@ a {
     grid-column: 1 / -1;
 }
 
+.form-grid > * {
+    min-width: 0;
+}
+
+.ticket-dispatch-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+    align-items: start;
+}
+
+.ticket-dispatch-grid > .field:last-child {
+    width: 100%;
+    max-width: 280px;
+    justify-self: stretch;
+}
+
 .field {
     display: grid;
     gap: 7px;
+    min-width: 0;
 }
 
 .field > span {
@@ -638,6 +654,46 @@ a {
 .input.compact {
     min-height: 36px;
     padding: 7px 10px;
+}
+
+.password-field {
+    position: relative;
+}
+
+.password-field .input {
+    padding-right: 48px;
+}
+
+.password-field .input::-ms-reveal,
+.password-field .input::-ms-clear {
+    display: none;
+}
+
+.password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transform: translateY(-50%);
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+    background: var(--surface-soft);
+    color: var(--primary);
+    outline: none;
+}
+
+.password-toggle .material-symbols-outlined {
+    font-size: 20px;
 }
 
 .department-picker {
@@ -703,6 +759,80 @@ a {
 .department-choice.active .department-choice-dot {
     border-color: var(--primary);
     background: var(--primary);
+}
+
+.assignee-picker {
+    min-width: 0;
+    max-height: 280px;
+    overflow: auto;
+    display: grid;
+    gap: 8px;
+    padding-right: 2px;
+}
+
+.assignee-choice {
+    min-width: 0;
+    width: 100%;
+    min-height: 52px;
+    border: 1px solid var(--surface-line);
+    border-radius: 10px;
+    background: var(--surface-card);
+    color: var(--text);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.assignee-choice > span {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.assignee-choice strong {
+    overflow-wrap: anywhere;
+    font-size: 14px;
+}
+
+.assignee-choice small {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+.assignee-choice input {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+}
+
+.assignee-choice.active {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+}
+
+.assignee-progress {
+    display: grid;
+    gap: 8px;
+    justify-items: end;
+}
+
+.assignee-progress-item {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+    text-align: right;
+}
+
+.assignee-progress-item > span:first-child {
+    color: var(--text);
+    font-size: 13px;
 }
 
 .badge {
@@ -925,6 +1055,64 @@ a {
     font-weight: 700;
 }
 
+.ai-suggestion-panel {
+    display: grid;
+    gap: 14px;
+}
+
+.ai-suggestion-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.ai-suggestion-meta,
+.ai-suggestion-files {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ai-suggestion-error {
+    border: 1px solid var(--danger-soft);
+    border-radius: 10px;
+    background: #fff5f4;
+    color: var(--danger);
+    padding: 10px 12px;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.ai-suggestion-result {
+    display: grid;
+    gap: 12px;
+}
+
+.ai-suggestion-result-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 800;
+    flex-wrap: wrap;
+}
+
+.ai-suggestion-content {
+    border: 1px solid var(--surface-line);
+    border-radius: 10px;
+    background: var(--surface-low);
+    padding: 14px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.65;
+}
+
 .muted {
     color: var(--muted);
 }
@@ -1057,8 +1245,13 @@ a {
     .report-stat-grid,
     .ticket-filter-controls,
     .form-grid,
+    .ticket-dispatch-grid,
     .login-page {
         grid-template-columns: 1fr;
+    }
+
+    .ticket-dispatch-grid > .field:last-child {
+        max-width: none;
     }
 
     .login-visual {

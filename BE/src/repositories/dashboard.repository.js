@@ -45,7 +45,8 @@ const getSupportPerformance = () => db.query(`
         ROUND(AVG(f.rating), 2) AS avg_rating
     FROM users u
     INNER JOIN roles r ON r.id = u.role_id AND r.code = 'SUPPORT'
-    LEFT JOIN tickets t ON t.assigned_to = u.id
+    LEFT JOIN ticket_assignees ta ON ta.user_id = u.id
+    LEFT JOIN tickets t ON t.id = ta.ticket_id
     LEFT JOIN ticket_statuses st ON st.id = t.status_id
     LEFT JOIN ticket_feedback f ON f.ticket_id = t.id
     GROUP BY u.id, u.full_name

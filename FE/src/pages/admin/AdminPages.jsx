@@ -884,7 +884,7 @@ function CreateUserPage() {
                 <div className="form-grid">
                     <Field label="Họ tên"><input className="input" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required /></Field>
                     <Field label="Email"><input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></Field>
-                    <Field label="Mật khẩu tạm thời"><input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Nhập mật khẩu tạm thời" required /></Field>
+                    <Field label="Mật khẩu tạm thời"><PasswordInput value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Nhập mật khẩu tạm thời" autoComplete="new-password" required /></Field>
                     <Field label="Vai trò">
                         <select className="select" value={form.roleId} onChange={(e) => setForm({ ...form, roleId: e.target.value })}>
                             {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
