@@ -106,6 +106,16 @@ const generateAiSuggestion = asyncHandler(async (req, res) => {
     return success(res, data, 'Tạo gợi ý AI thành công');
 });
 
+const getAiChatMessages = asyncHandler(async (req, res) => {
+    const data = await ticketService.getAiChatMessages(req.params.id, req.user);
+    return success(res, data);
+});
+
+const sendAiChatMessage = asyncHandler(async (req, res) => {
+    const data = await ticketService.sendAiChatMessage(req.params.id, req.body, req.user);
+    return success(res, data, 'AI đã phản hồi');
+});
+
 const addFeedback = asyncHandler(async (req, res) => {
     const data = await ticketService.addFeedback(req.params.id, req.body, req.user);
     return created(res, data, 'Gửi đánh giá thành công');
@@ -143,6 +153,8 @@ module.exports = {
     uploadAttachment,
     getAttachments,
     generateAiSuggestion,
+    getAiChatMessages,
+    sendAiChatMessage,
     addFeedback,
     getTicketHistory,
     getAssignmentHistory

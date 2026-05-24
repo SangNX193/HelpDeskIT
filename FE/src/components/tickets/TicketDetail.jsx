@@ -53,6 +53,7 @@ function TicketDetailPage() {
                 </Section>
             </div>
             <AiSuggestionPanel ticket={ticket} attachments={attachments} />
+            <AiChatPanel ticket={ticket} />
             {(user.role_code === "MANAGER" || user.role_code === "ADMIN") && !isClosed(ticket) && <ManagerTicketPanel ticket={ticket} refresh={refresh} />}
             {editing && (
                 <TicketEditModal
@@ -119,6 +120,103 @@ function AiSuggestionPanel({ ticket, attachments = [] }) {
                         )}
                     </div>
                 )}
+            </div>
+        </Section>
+    );
+}
+
+function AiChatPanel({ ticket }) {
+    const toast = useToast();
+    const { data: messages, setData: setMessages, loading } = useApi(`/tickets/${ticket.id}/ai-chat`, []);
+    const [draft, setDraft] = React.useState("");
+    const [sending, setSending] = React.useState(false);
+    const listRef = React.useRef(null);
+    const safeMessages = Array.isArray(messages) ? messages : [];
+
+    React.useEffect(() => {
+        if (listRef.current) {
+            listRef.current.scrollTop = listRef.current.scrollHeight;
+        }
+    }, [safeMessages.length, sending]);
+
+    const send = async (event) => {
+        event.preventDefault();
+        const content = draft.trim();
+        if (!content || sending) return;
+
+        const optimisticId = `local-${Date.now()}`;
+        const optimisticMessage = {
+            id: optimisticId,
+            role: "USER",
+            content,
+            user_name: "Bạn",
+            created_at: new Date().toISOString()
+        };
+
+        setDraft("");
+        setSending(true);
+        setMessages((items) => [...(Array.isArray(items) ? items : []), optimisticMessage]);
+
+        try {
+            const response = await api.post(`/tickets/${ticket.id}/ai-chat`, { message: content });
+            setMessages(response.data.data.messages || []);
+        } catch (error) {
+            setDraft(content);
+            setMessages((items) => (Array.isArray(items) ? items.filter((item) => item.id !== optimisticId) : []));
+            toast(errorMessage(error), "error");
+        } finally {
+            setSending(false);
+        }
+    };
+
+    return (
+        <Section title="Chat AI">
+            <div className="ai-chat-panel">
+                <div className="ai-chat-messages" ref={listRef}>
+                    {loading && safeMessages.length === 0 ? (
+                        <Empty text="Đang tải hội thoại..." />
+                    ) : safeMessages.length === 0 ? (
+                        <Empty text="Chưa có hội thoại AI" />
+                    ) : safeMessages.map((message) => {
+                        const isAssistant = message.role === "ASSISTANT";
+                        return (
+                            <div key={message.id} className={`ai-chat-message ${isAssistant ? "assistant" : "user"}`}>
+                                <div className="ai-chat-bubble">
+                                    <div className="ai-chat-meta">
+                                        <strong>{isAssistant ? "AI Helpdesk" : "Bạn"}</strong>
+                                        <span>{formatDate(message.created_at)}</span>
+                                    </div>
+                                    <div className="ai-chat-content">{message.content}</div>
+                                    {isAssistant && message.model && <div className="ai-chat-model">{message.provider} / {message.model}</div>}
+                                </div>
+                            </div>
+                        );
+                    })}
+                    {sending && (
+                        <div className="ai-chat-message assistant">
+                            <div className="ai-chat-bubble">
+                                <div className="ai-chat-meta">
+                                    <strong>AI Helpdesk</strong>
+                                </div>
+                                <div className="ai-chat-content">Đang phản hồi...</div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <form className="ai-chat-form" onSubmit={send}>
+                    <textarea
+                        className="input"
+                        rows="2"
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        placeholder="Nhập câu hỏi cho AI"
+                        disabled={sending}
+                    />
+                    <button className="btn primary ai-chat-send" type="submit" disabled={sending || !draft.trim()}>
+                        <Icon name={sending ? "hourglass_top" : "send"} />
+                        {sending ? "Đang gửi" : "Gửi"}
+                    </button>
+                </form>
             </div>
         </Section>
     );

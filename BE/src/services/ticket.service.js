@@ -50,6 +50,9 @@ const toMysqlDate = (date) => date.toISOString().slice(0, 19).replace('T', ' ');
 const addMinutes = (minutes) => toMysqlDate(new Date(Date.now() + Number(minutes) * 60 * 1000));
 const EDIT_WINDOW_MINUTES = 5;
 const MAX_ROOM_LENGTH = 60;
+const MAX_AI_CHAT_MESSAGE_LENGTH = Number(process.env.AI_CHAT_MAX_MESSAGE_LENGTH) || 2000;
+const AI_CHAT_LOAD_LIMIT = Number(process.env.AI_CHAT_LOAD_LIMIT) || 50;
+const AI_CHAT_HISTORY_LIMIT = Number(process.env.AI_CHAT_HISTORY_LIMIT) || 12;
 
 const generateTicketCode = () => {
     const now = new Date();
@@ -71,6 +74,20 @@ const ensureMeaningfulText = (value, label) => {
 
     if (/^(.)\1{5,}$/u.test(normalized.replace(/\s+/g, ''))) {
         throw httpError(400, `${label} không hợp lệ`);
+    }
+
+    return normalized;
+};
+
+const ensureAiChatMessage = (value) => {
+    const normalized = normalizeText(value);
+
+    if (!normalized) {
+        throw httpError(400, 'Vui lòng nhập tin nhắn');
+    }
+
+    if (normalized.length > MAX_AI_CHAT_MESSAGE_LENGTH) {
+        throw httpError(400, `Tin nhắn không được vượt quá ${MAX_AI_CHAT_MESSAGE_LENGTH} ký tự`);
     }
 
     return normalized;
@@ -804,6 +821,67 @@ const generateAiSuggestion = async (ticketId, user) => {
     return result;
 };
 
+const getAiChatMessages = async (ticketId, user) => {
+    const ticket = await ensureTicket(ticketId);
+    await ensureAccess(ticket, user);
+    return ticketRepository.getAiChatMessages(ticketId, user.id, AI_CHAT_LOAD_LIMIT);
+};
+
+const sendAiChatMessage = async (ticketId, payload, user) => {
+    const ticket = await ensureTicket(ticketId);
+    await ensureAccess(ticket, user);
+
+    const content = ensureAiChatMessage(valueOf(payload, 'message', 'content'));
+    const attachments = await ticketRepository.getAttachments(ticketId);
+    const history = await ticketRepository.getAiChatMessages(ticketId, user.id, AI_CHAT_HISTORY_LIMIT);
+    const messages = [
+        ...history,
+        {
+            role: 'USER',
+            content,
+            user_name: user.full_name
+        }
+    ];
+    const result = await aiSuggestionService.generateChatReply({
+        ticket,
+        attachments,
+        messages,
+        user
+    });
+
+    await ticketRepository.addAiChatMessage({
+        ticket_id: ticketId,
+        user_id: user.id,
+        role: 'USER',
+        content
+    });
+
+    await ticketRepository.addAiChatMessage({
+        ticket_id: ticketId,
+        user_id: user.id,
+        role: 'ASSISTANT',
+        content: result.message,
+        provider: result.provider,
+        model: result.model
+    });
+
+    await ticketRepository.addHistory({
+        ticket_id: ticketId,
+        user_id: user.id,
+        action: 'AI_CHAT',
+        to_value: result.provider,
+        note: `Chat AI bằng ${result.model}`
+    });
+
+    return {
+        provider: result.provider,
+        model: result.model,
+        attachments_used: result.attachments_used,
+        generated_at: result.generated_at,
+        messages: await ticketRepository.getAiChatMessages(ticketId, user.id, AI_CHAT_LOAD_LIMIT)
+    };
+};
+
 const addFeedback = async (ticketId, payload, user) => {
     const ticket = await ensureTicket(ticketId);
 
@@ -879,6 +957,8 @@ module.exports = {
     uploadAttachment,
     getAttachments,
     generateAiSuggestion,
+    getAiChatMessages,
+    sendAiChatMessage,
     addFeedback,
     getTicketHistory,
     getAssignmentHistory

@@ -27,6 +27,13 @@ const configuredOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5000,htt
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+if (process.env.NODE_ENV !== 'production') {
+    for (const localOrigin of ['http://localhost:5000', 'http://127.0.0.1:5000']) {
+        if (!configuredOrigins.includes(localOrigin)) {
+            configuredOrigins.push(localOrigin);
+        }
+    }
+}
 const allowAnyOrigin = configuredOrigins.includes('*');
 
 app.use((req, res, next) => {

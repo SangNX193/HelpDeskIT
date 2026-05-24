@@ -34,7 +34,8 @@ function resolveApiOrigin(apiBase) {
     return `${apiUrl.origin}${apiUrl.pathname === "/" ? "" : apiUrl.pathname.replace(/\/$/, "")}`;
 }
 
-const API_BASE = normalizeApiBase(localStorage.getItem("appApiBase") || resolveDefaultApiBase());
+const runtimeApiBase = window.__HELPDESK_CONFIG__?.apiBase;
+const API_BASE = normalizeApiBase(runtimeApiBase || resolveDefaultApiBase());
 const API_ORIGIN = resolveApiOrigin(API_BASE);
 const DEFAULT_PAGE_SIZE = 10;
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];

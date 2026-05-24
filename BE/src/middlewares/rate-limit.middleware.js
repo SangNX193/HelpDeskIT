@@ -54,7 +54,7 @@ const aiSuggestionRateLimit = (req, res, next) => {
 
     if (current.count >= maxAttempts) {
         res.setHeader('Retry-After', Math.ceil((current.resetAt - now) / 1000));
-        return error(res, 'Bạn đã tạo quá nhiều gợi ý AI, vui lòng thử lại sau.', 429);
+        return error(res, 'Bạn đã dùng AI quá nhiều lần, vui lòng thử lại sau.', 429);
     }
 
     current.count += 1;

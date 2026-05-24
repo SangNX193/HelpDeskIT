@@ -21,6 +21,18 @@ const contentTypes = {
 
 const server = http.createServer((req, res) => {
     const urlPath = decodeURIComponent(req.url.split('?')[0]);
+
+    if (urlPath === '/runtime-config.js') {
+        res.writeHead(200, {
+            'Content-Type': 'text/javascript; charset=utf-8',
+            'Cache-Control': 'no-store'
+        });
+        res.end(`window.__HELPDESK_CONFIG__ = ${JSON.stringify({
+            apiBase: process.env.FE_API_BASE || ''
+        })};`);
+        return;
+    }
+
     const safePath = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
     let filePath = path.join(root, safePath === '/' ? 'index.html' : safePath);
 

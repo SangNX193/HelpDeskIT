@@ -60,6 +60,7 @@ const validateFeedback = (req, res, next) => {
 const validateAssignTicket = requireFields({ fields: ['supportIds', 'support_ids', 'supportId', 'support_id', 'assignedTo', 'assigned_to'], label: 'nhân viên IT' });
 const validateUpdateStatus = requireFields({ fields: ['statusId', 'status_id', 'statusCode', 'status_code'], label: 'trạng thái' });
 const validateUpdatePriority = requireFields({ fields: ['priorityId', 'priority_id', 'priorityCode', 'priority_code'], label: 'mức ưu tiên' });
+const validateAiChatMessage = requireFields({ fields: ['message', 'content'], label: 'tin nhắn' });
 
 module.exports = {
     validateCreateTicket,
@@ -67,5 +68,6 @@ module.exports = {
     validateFeedback,
     validateAssignTicket,
     validateUpdateStatus,
-    validateUpdatePriority
+    validateUpdatePriority,
+    validateAiChatMessage
 };

@@ -13,7 +13,8 @@ const {
     validateFeedback,
     validateAssignTicket,
     validateUpdateStatus,
-    validateUpdatePriority
+    validateUpdatePriority,
+    validateAiChatMessage
 } = require('../validators/ticket.validator');
 
 router.use(authMiddleware);
@@ -142,6 +143,18 @@ router.post(
     '/:id/ai-suggestions',
     aiSuggestionRateLimit,
     ticketController.generateAiSuggestion
+);
+
+router.get(
+    '/:id/ai-chat',
+    ticketController.getAiChatMessages
+);
+
+router.post(
+    '/:id/ai-chat',
+    aiSuggestionRateLimit,
+    validateAiChatMessage,
+    ticketController.sendAiChatMessage
 );
 
 router.post(

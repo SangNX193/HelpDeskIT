@@ -407,6 +407,38 @@ const getComments = (ticketId) => db.query(`
     ORDER BY c.created_at ASC
 `, [ticketId]);
 
+const addAiChatMessage = async (data) => {
+    const result = await db.query(`
+        INSERT INTO ticket_ai_messages (ticket_id, user_id, role, content, provider, model)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `, [
+        data.ticket_id,
+        data.user_id,
+        data.role,
+        data.content,
+        data.provider || null,
+        data.model || null
+    ]);
+    return result.insertId;
+};
+
+const getAiChatMessages = (ticketId, userId, limit = 50) => db.query(`
+    SELECT
+        m.*,
+        u.full_name AS user_name,
+        r.code AS user_role_code
+    FROM (
+        SELECT *
+        FROM ticket_ai_messages
+        WHERE ticket_id = ? AND user_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+    ) m
+    INNER JOIN users u ON u.id = m.user_id
+    INNER JOIN roles r ON r.id = u.role_id
+    ORDER BY m.created_at ASC, m.id ASC
+`, [ticketId, userId, Number(limit) || 50]);
+
 const addAttachment = async (data) => {
     const result = await db.query(`
         INSERT INTO ticket_attachments (
@@ -535,6 +567,8 @@ module.exports = {
     userHasRoomAccess,
     addComment,
     getComments,
+    addAiChatMessage,
+    getAiChatMessages,
     addAttachment,
     getAttachments,
     addFeedback,
