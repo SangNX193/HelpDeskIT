@@ -26,7 +26,8 @@ Import theo thứ tự:
 4. `src/database/migrations/004_add_user_departments.sql`
 5. `src/database/migrations/005_add_ticket_assignees.sql`
 6. `src/database/migrations/006_add_ticket_assignee_status.sql`
-7. `src/database/seeders/001_seed_master_data.sql`
+7. `src/database/migrations/007_add_ticket_ai_messages.sql`
+8. `src/database/seeders/001_seed_master_data.sql`
 
 Nên import bằng `mysql.exe` với `--default-character-set=utf8mb4` để không lỗi tiếng Việt. Nếu thư mục dự án không phải `D:\HelpDesk`, đổi lại đường dẫn cho đúng máy của bạn.
 
@@ -37,6 +38,7 @@ cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=
 cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --default-character-set=utf8mb4 utc_helpdesk < D:\HelpDesk\BE\src\database\migrations\004_add_user_departments.sql"
 cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --default-character-set=utf8mb4 utc_helpdesk < D:\HelpDesk\BE\src\database\migrations\005_add_ticket_assignees.sql"
 cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --default-character-set=utf8mb4 utc_helpdesk < D:\HelpDesk\BE\src\database\migrations\006_add_ticket_assignee_status.sql"
+cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --default-character-set=utf8mb4 utc_helpdesk < D:\HelpDesk\BE\src\database\migrations\007_add_ticket_ai_messages.sql"
 cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --default-character-set=utf8mb4 utc_helpdesk < D:\HelpDesk\BE\src\database\seeders\001_seed_master_data.sql"
 ```
 
