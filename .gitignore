@@ -25,9 +25,14 @@ yarn-error.log*
 # Build/cache output
 dist/
 build/
+out/
 .cache/
 .parcel-cache/
 .vite/
+
+# Non-deploy local artifacts
+Postman/
+docs/
 
 # Local uploads/runtime files
 uploads/
