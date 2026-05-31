@@ -104,6 +104,7 @@ Frontend không cần build tool phức tạp. Server tĩnh nằm ở `FE/server
 
 ```powershell
 cd FE
+Copy-Item .env.example .env
 npm.cmd start
 ```
 
@@ -114,6 +115,14 @@ http://localhost:5000/login
 ```
 
 FE dùng các thư viện React/React Router/Axios/Babel đã tải local trong `FE/vendor`, nên khi demo không cần internet cho các thư viện CDN.
+
+Cấu hình API cho FE nằm trong `FE/.env`:
+
+```env
+FE_API_BASE=http://localhost:3000/api
+```
+
+Khi deploy, đổi `FE_API_BASE` sang URL API thật, ví dụ `https://api.example.com/api`.
 
 ## Route frontend chính
 

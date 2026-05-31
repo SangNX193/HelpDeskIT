@@ -66,6 +66,14 @@ const roomMatchesDepartmentCode = (roomExpression) => `
 
 const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const normalizeLimit = (value, fallback = 50, max = 200) => {
+    const limit = Number(value);
+    if (!Number.isInteger(limit) || limit <= 0) {
+        return fallback;
+    }
+    return Math.min(limit, max);
+};
+
 const appendFilters = (filters = {}) => {
     const conditions = [];
     const params = [];
@@ -422,22 +430,26 @@ const addAiChatMessage = async (data) => {
     return result.insertId;
 };
 
-const getAiChatMessages = (ticketId, userId, limit = 50) => db.query(`
-    SELECT
-        m.*,
-        u.full_name AS user_name,
-        r.code AS user_role_code
-    FROM (
-        SELECT *
-        FROM ticket_ai_messages
-        WHERE ticket_id = ? AND user_id = ?
-        ORDER BY created_at DESC, id DESC
-        LIMIT ?
-    ) m
-    INNER JOIN users u ON u.id = m.user_id
-    INNER JOIN roles r ON r.id = u.role_id
-    ORDER BY m.created_at ASC, m.id ASC
-`, [ticketId, userId, Number(limit) || 50]);
+const getAiChatMessages = (ticketId, userId, limit = 50) => {
+    const safeLimit = normalizeLimit(limit);
+
+    return db.query(`
+        SELECT
+            m.*,
+            u.full_name AS user_name,
+            r.code AS user_role_code
+        FROM (
+            SELECT *
+            FROM ticket_ai_messages
+            WHERE ticket_id = ? AND user_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${safeLimit}
+        ) m
+        INNER JOIN users u ON u.id = m.user_id
+        INNER JOIN roles r ON r.id = u.role_id
+        ORDER BY m.created_at ASC, m.id ASC
+    `, [ticketId, userId]);
+};
 
 const addAttachment = async (data) => {
     const result = await db.query(`

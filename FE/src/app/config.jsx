@@ -12,14 +12,7 @@ const {
 } = ReactRouterDOM;
 
 function resolveDefaultApiBase() {
-    const runtimeApiBase = window.__HELPDESK_CONFIG__?.apiBase;
-    if (runtimeApiBase) return runtimeApiBase;
-
-    if (["localhost", "127.0.0.1"].includes(window.location.hostname)) {
-        return "http://localhost:3000/api";
-    }
-
-    return `${window.location.origin}/api`;
+    return "/api";
 }
 
 function normalizeApiBase(value) {

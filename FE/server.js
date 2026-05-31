@@ -2,8 +2,41 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = Number(process.env.FE_PORT) || 5000;
 const root = __dirname;
+
+const loadEnvFile = (filePath) => {
+    if (!fs.existsSync(filePath)) {
+        return;
+    }
+
+    for (const line of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) {
+            continue;
+        }
+
+        const separatorIndex = trimmed.indexOf('=');
+        if (separatorIndex <= 0) {
+            continue;
+        }
+
+        const key = trimmed.slice(0, separatorIndex).trim();
+        let value = trimmed.slice(separatorIndex + 1).trim();
+
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1);
+        }
+
+        if (process.env[key] === undefined) {
+            process.env[key] = value;
+        }
+    }
+};
+
+loadEnvFile(path.join(root, '.env'));
+
+const PORT = Number(process.env.FE_PORT) || 5000;
+const API_BASE = process.env.FE_API_BASE || '';
 
 const contentTypes = {
     '.html': 'text/html; charset=utf-8',
@@ -28,7 +61,7 @@ const server = http.createServer((req, res) => {
             'Cache-Control': 'no-store'
         });
         res.end(`window.__HELPDESK_CONFIG__ = ${JSON.stringify({
-            apiBase: process.env.FE_API_BASE || ''
+            apiBase: API_BASE
         })};`);
         return;
     }
