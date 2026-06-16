@@ -2,6 +2,7 @@ const fs = require('fs/promises');
 const path = require('path');
 
 const { getUploadDir } = require('../config/upload');
+const { toIsoWithOffset } = require('../utils/time');
 
 const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 30000;
 const MAX_IMAGE_ATTACHMENTS = Number(process.env.AI_MAX_IMAGE_ATTACHMENTS) || 3;
@@ -299,7 +300,7 @@ const generateSuggestion = async ({ ticket, attachments }) => {
         model,
         suggestion,
         attachments_used: images.map((image) => image.name),
-        generated_at: new Date().toISOString()
+        generated_at: toIsoWithOffset()
     };
 };
 
@@ -332,7 +333,7 @@ const generateChatReply = async ({ ticket, attachments, messages, user }) => {
         model,
         message,
         attachments_used: images.map((image) => image.name),
-        generated_at: new Date().toISOString()
+        generated_at: toIsoWithOffset()
     };
 };
 

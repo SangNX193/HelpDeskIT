@@ -5,10 +5,14 @@ const ticketRepository = require('../repositories/ticket.repository');
 const notificationRepository = require('../repositories/notification.repository');
 const authRepository = require('../repositories/auth.repository');
 const aiSuggestionService = require('./ai-suggestion.service');
+const { addMinutes, appDateParts, parseAppDate, toMysqlDate } = require('../utils/time');
 
-const httpError = (statusCode, message) => {
+const httpError = (statusCode, message, details = undefined) => {
     const error = new Error(message);
     error.statusCode = statusCode;
+    if (details !== undefined) {
+        error.details = details;
+    }
     return error;
 };
 
@@ -45,25 +49,80 @@ const boolValue = (value) => {
     return Boolean(value);
 };
 
-const toMysqlDate = (date) => date.toISOString().slice(0, 19).replace('T', ' ');
-
-const addMinutes = (minutes) => toMysqlDate(new Date(Date.now() + Number(minutes) * 60 * 1000));
 const EDIT_WINDOW_MINUTES = 5;
 const MAX_ROOM_LENGTH = 60;
+const DUPLICATE_LOOKBACK_MINUTES = Number(process.env.TICKET_DUPLICATE_LOOKBACK_MINUTES) || 240;
 const MAX_AI_CHAT_MESSAGE_LENGTH = Number(process.env.AI_CHAT_MAX_MESSAGE_LENGTH) || 2000;
 const AI_CHAT_LOAD_LIMIT = Number(process.env.AI_CHAT_LOAD_LIMIT) || 50;
 const AI_CHAT_HISTORY_LIMIT = Number(process.env.AI_CHAT_HISTORY_LIMIT) || 12;
 
 const generateTicketCode = () => {
-    const now = new Date();
+    const now = appDateParts();
     const part = (value) => String(value).padStart(2, '0');
-    const date = `${now.getFullYear()}${part(now.getMonth() + 1)}${part(now.getDate())}`;
-    const time = `${part(now.getHours())}${part(now.getMinutes())}${part(now.getSeconds())}`;
+    const date = `${now.year}${part(now.month)}${part(now.day)}`;
+    const time = `${part(now.hour)}${part(now.minute)}${part(now.second)}`;
     const suffix = crypto.randomBytes(2).toString('hex').toUpperCase();
     return `HD${date}${time}${suffix}`;
 };
 
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+
+const normalizeForDuplicate = (value) => normalizeText(value)
+    .toLocaleLowerCase('vi')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
+
+const duplicateTokens = (value) => new Set(
+    normalizeForDuplicate(value)
+        .split(/[^a-z0-9]+/i)
+        .filter((token) => token.length >= 3)
+);
+
+const tokenOverlap = (left, right) => {
+    const leftTokens = duplicateTokens(left);
+    const rightTokens = duplicateTokens(right);
+
+    if (!leftTokens.size || !rightTokens.size) {
+        return 0;
+    }
+
+    let matches = 0;
+    for (const token of leftTokens) {
+        if (rightTokens.has(token)) {
+            matches += 1;
+        }
+    }
+
+    return matches / Math.min(leftTokens.size, rightTokens.size);
+};
+
+const duplicateScore = (candidate, input) => {
+    let score = 70;
+    const titleOverlap = tokenOverlap(candidate.title, input.title);
+    const descriptionOverlap = tokenOverlap(candidate.description, input.description);
+
+    if (titleOverlap >= 0.35) {
+        score += 20;
+    } else if (titleOverlap > 0) {
+        score += 10;
+    }
+
+    if (descriptionOverlap >= 0.25) {
+        score += 10;
+    }
+
+    return Math.min(score, 100);
+};
+
+const decorateDuplicateCandidates = (candidates, input) => candidates
+    .map((candidate) => ({
+        ...candidate,
+        duplicate_score: duplicateScore(candidate, input),
+        duplicate_reason: 'Cùng phòng/khu, cùng dịch vụ và đang có ticket mở trong thời gian gần đây'
+    }))
+    .sort((left, right) => right.duplicate_score - left.duplicate_score)
+    .slice(0, 5);
 
 const ensureMeaningfulText = (value, label) => {
     const normalized = normalizeText(value);
@@ -202,6 +261,10 @@ const ensureAccess = async (ticket, user) => {
         return;
     }
 
+    if (role === 'REQUESTER' && await ticketRepository.isTicketWatcher(ticket.id, user.id)) {
+        return;
+    }
+
     if (role === 'SUPPORT' && assignedSupportIdsOf(ticket).includes(Number(user.id))) {
         return;
     }
@@ -309,7 +372,7 @@ const notifyUsers = async (userIds, title, message, type, ticketId) => {
     }
 };
 
-const createTicket = async (payload, user) => {
+const duplicateInputFromPayload = async (payload) => {
     const serviceId = valueOf(payload, 'serviceId', 'service_id');
     const service = await ticketRepository.getServiceById(serviceId);
 
@@ -317,9 +380,41 @@ const createTicket = async (payload, user) => {
         throw httpError(404, 'Không tìm thấy dịch vụ');
     }
 
-    const title = ensureMeaningfulText(valueOf(payload, 'title'), 'Tiêu đề');
-    const description = ensureMeaningfulText(valueOf(payload, 'description'), 'Mô tả chi tiết');
-    const room = await resolveRoomLocation(payload);
+    return {
+        service,
+        title: ensureMeaningfulText(valueOf(payload, 'title'), 'Tiêu đề'),
+        description: ensureMeaningfulText(valueOf(payload, 'description'), 'Mô tả chi tiết'),
+        room: await resolveRoomLocation(payload)
+    };
+};
+
+const findDuplicateCandidates = async (input) => {
+    const candidates = await ticketRepository.findDuplicateCandidates({
+        room: input.room,
+        serviceId: input.service.id,
+        windowMinutes: DUPLICATE_LOOKBACK_MINUTES,
+        limit: 8
+    });
+
+    return decorateDuplicateCandidates(candidates, input);
+};
+
+const checkDuplicateTickets = async (payload) => {
+    const input = await duplicateInputFromPayload(payload);
+    return findDuplicateCandidates(input);
+};
+
+const createTicket = async (payload, user) => {
+    const duplicateInput = await duplicateInputFromPayload(payload);
+    const { service, title, description, room } = duplicateInput;
+    const allowDuplicate = boolValue(valueOf(payload, 'allowDuplicate', 'allow_duplicate', 'forceCreate', 'force_create'));
+    if (!allowDuplicate) {
+        const duplicates = await findDuplicateCandidates(duplicateInput);
+        if (duplicates.length) {
+            throw httpError(409, 'Đã có yêu cầu tương tự đang được xử lý', { duplicates });
+        }
+    }
+
     const priority = await resolvePriority(payload);
     const status = await resolveStatus(payload);
     const sla = await ticketRepository.getSlaPolicy(service.id, priority.id);
@@ -363,6 +458,38 @@ const createTicket = async (payload, user) => {
     return ticketRepository.findById(id);
 };
 
+const watchDuplicateTicket = async (ticketId, payload, user) => {
+    const ticket = await ensureTicket(ticketId);
+
+    if (ticket.status_is_closed) {
+        throw httpError(400, 'Yêu cầu này đã kết thúc nên không thể theo dõi như ticket trùng');
+    }
+
+    if (Number(ticket.requester_id) === Number(user.id)) {
+        return ticket;
+    }
+
+    await ticketRepository.addTicketWatcher({
+        ticket_id: ticketId,
+        user_id: user.id,
+        source: valueOf(payload, 'source') || 'WEB_DUPLICATE',
+        note: valueOf(payload, 'note', 'description')
+    });
+
+    await ticketRepository.addHistory({
+        ticket_id: ticketId,
+        user_id: user.id,
+        action: 'DUPLICATE_WATCH',
+        to_value: String(user.id),
+        note: valueOf(payload, 'note', 'description') || 'Người dùng theo dõi yêu cầu tương tự'
+    });
+
+    await notifyUser(ticket.requester_id, 'Có người cùng bị ảnh hưởng', `${user.full_name || 'Người dùng'} đã theo dõi yêu cầu ${ticket.code}`, 'DUPLICATE', ticketId);
+    await notifyUsers(assignedSupportIdsOf(ticket), 'Yêu cầu có thêm người bị ảnh hưởng', `${user.full_name || 'Người dùng'} cũng báo sự cố tương tự với ${ticket.code}`, 'DUPLICATE', ticketId);
+
+    return ticketRepository.findById(ticketId);
+};
+
 const updateRequesterTicket = async (ticketId, payload, user) => {
     const ticket = await ensureTicket(ticketId);
 
@@ -374,7 +501,7 @@ const updateRequesterTicket = async (ticketId, payload, user) => {
         throw httpError(400, 'Chỉ được chỉnh sửa yêu cầu khi trạng thái là mới tạo hoặc đã phân công');
     }
 
-    const createdAt = new Date(ticket.created_at).getTime();
+    const createdAt = parseAppDate(ticket.created_at)?.getTime();
     if (!Number.isFinite(createdAt) || Date.now() - createdAt > EDIT_WINDOW_MINUTES * 60 * 1000) {
         throw httpError(403, 'Đã quá 5 phút nên không thể chỉnh sửa yêu cầu này');
     }
@@ -436,7 +563,7 @@ const ticketFilters = (query, user) => ({
 
 const getAllTickets = (query, user) => ticketRepository.listTickets(ticketFilters(query, user));
 
-const getMyTickets = (user) => ticketRepository.listTickets({ requesterId: user.id });
+const getMyTickets = (user) => ticketRepository.listTickets({ requesterOrWatcherId: user.id });
 const getAssignedToMe = (user) => ticketRepository.listTickets({ assignedTo: user.id });
 const getUnassignedTickets = (user) => ticketRepository.listTickets({ unassigned: true, managerUserId: roleOf(user) === 'MANAGER' ? user.id : undefined });
 const getOverdueTickets = (user) => ticketRepository.listTickets({ overdue: true, managerUserId: roleOf(user) === 'MANAGER' ? user.id : undefined });
@@ -936,7 +1063,9 @@ const getAssignmentHistory = async (ticketId, user) => {
 };
 
 module.exports = {
+    checkDuplicateTickets,
     createTicket,
+    watchDuplicateTicket,
     updateRequesterTicket,
     getAllTickets,
     getMyTickets,

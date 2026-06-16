@@ -6,6 +6,16 @@ const createTicket = asyncHandler(async (req, res) => {
     return created(res, data, 'Tạo yêu cầu thành công');
 });
 
+const checkDuplicateTickets = asyncHandler(async (req, res) => {
+    const data = await ticketService.checkDuplicateTickets(req.body, req.user);
+    return success(res, data);
+});
+
+const watchDuplicateTicket = asyncHandler(async (req, res) => {
+    const data = await ticketService.watchDuplicateTicket(req.params.id, req.body, req.user);
+    return success(res, data, 'Đã theo dõi yêu cầu tương tự');
+});
+
 const updateRequesterTicket = asyncHandler(async (req, res) => {
     const data = await ticketService.updateRequesterTicket(req.params.id, req.body, req.user);
     return success(res, data, 'Cập nhật yêu cầu thành công');
@@ -133,6 +143,8 @@ const getAssignmentHistory = asyncHandler(async (req, res) => {
 
 module.exports = {
     createTicket,
+    checkDuplicateTickets,
+    watchDuplicateTicket,
     updateRequesterTicket,
     getAllTickets,
     getMyTickets,

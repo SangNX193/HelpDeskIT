@@ -43,6 +43,16 @@ const ticketSelect = `
         st.name AS status_name,
         st.color AS status_color,
         st.is_closed AS status_is_closed,
+        COALESCE((
+            SELECT COUNT(*)
+            FROM ticket_watchers watcher_count
+            WHERE watcher_count.ticket_id = t.id
+        ), 0) AS watcher_count,
+        1 + COALESCE((
+            SELECT COUNT(*)
+            FROM ticket_watchers affected_count
+            WHERE affected_count.ticket_id = t.id
+        ), 0) AS affected_count,
         f.rating AS feedback_rating,
         f.comment AS feedback_comment
     FROM tickets t
@@ -78,7 +88,18 @@ const appendFilters = (filters = {}) => {
     const conditions = [];
     const params = [];
 
-    if (filters.requesterId) {
+    if (filters.requesterOrWatcherId) {
+        conditions.push(`(
+            t.requester_id = ?
+            OR EXISTS (
+                SELECT 1
+                FROM ticket_watchers tw_filter
+                WHERE tw_filter.ticket_id = t.id
+                  AND tw_filter.user_id = ?
+            )
+        )`);
+        params.push(filters.requesterOrWatcherId, filters.requesterOrWatcherId);
+    } else if (filters.requesterId) {
         conditions.push('t.requester_id = ?');
         params.push(filters.requesterId);
     }
@@ -170,6 +191,21 @@ const findById = async (id) => {
 const findByCode = async (code) => {
     const rows = await db.query(`${ticketSelect} WHERE t.code = ? LIMIT 1`, [code]);
     return rows[0] || null;
+};
+
+const findDuplicateCandidates = async ({ room, serviceId, windowMinutes = 240, limit = 5 }) => {
+    const safeWindow = normalizeLimit(windowMinutes, 240, 1440);
+    const safeLimit = normalizeLimit(limit, 5, 20);
+
+    return db.query(`
+        ${ticketSelect}
+        WHERE t.room = ?
+          AND t.service_id = ?
+          AND st.is_closed = 0
+          AND t.created_at >= DATE_SUB(NOW(), INTERVAL ${safeWindow} MINUTE)
+        ORDER BY t.created_at DESC
+        LIMIT ${safeLimit}
+    `, [room, serviceId]);
 };
 
 const createTicket = async (data) => {
@@ -395,6 +431,35 @@ const userHasRoomAccess = async (userId, room) => {
     return rows.length > 0;
 };
 
+const addTicketWatcher = async (data) => {
+    await db.query(`
+        INSERT INTO ticket_watchers (ticket_id, user_id, source, note)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            source = VALUES(source),
+            note = COALESCE(VALUES(note), note),
+            updated_at = CURRENT_TIMESTAMP
+    `, [
+        data.ticket_id,
+        data.user_id,
+        data.source || 'WEB_DUPLICATE',
+        data.note || null
+    ]);
+
+    return findById(data.ticket_id);
+};
+
+const isTicketWatcher = async (ticketId, userId) => {
+    const rows = await db.query(`
+        SELECT 1
+        FROM ticket_watchers
+        WHERE ticket_id = ? AND user_id = ?
+        LIMIT 1
+    `, [ticketId, userId]);
+
+    return rows.length > 0;
+};
+
 const addComment = async (data) => {
     const result = await db.query(`
         INSERT INTO ticket_comments (ticket_id, user_id, content, is_internal)
@@ -559,6 +624,7 @@ module.exports = {
     listTickets,
     findById,
     findByCode,
+    findDuplicateCandidates,
     createTicket,
     updateTicket,
     updateRequesterTicket,
@@ -577,6 +643,8 @@ module.exports = {
     getActiveDepartmentByRoom,
     getSlaPolicy,
     userHasRoomAccess,
+    addTicketWatcher,
+    isTicketWatcher,
     addComment,
     getComments,
     addAiChatMessage,

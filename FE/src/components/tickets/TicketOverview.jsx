@@ -183,6 +183,7 @@ function TicketCard({ ticket }) {
                 <Badge value={ticket.priority_name} type={ticket.priority_code === "P1" ? "danger" : "primary"} />
                 <Badge value={ticket.status_name} type={statusClassName(ticket.status_code)} />
             </div>
+            {Number(ticket.affected_count) > 1 && <Badge value={`${ticket.affected_count} người ảnh hưởng`} type="warning" />}
             <div>
                 <p className="muted" style={{ margin: 0 }}>{ticket.code}</p>
                 <h3 className="ticket-card-title">{ticket.title}</h3>

@@ -51,6 +51,9 @@ FE/src
    - `BE/src/database/migrations/005_add_ticket_assignees.sql`
    - `BE/src/database/migrations/006_add_ticket_assignee_status.sql`
    - `BE/src/database/migrations/007_add_ticket_ai_messages.sql`
+   - `BE/src/database/migrations/008_add_ticket_watchers.sql`
+   - `BE/src/database/migrations/009_add_consultation_chat.sql`
+   - `BE/src/database/migrations/010_add_consultation_inbox_state.sql`
    - `BE/src/database/seeders/001_seed_master_data.sql`
 4. Kiểm tra có database `utc_helpdesk`.
 
@@ -64,6 +67,9 @@ cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=
 cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --default-character-set=utf8mb4 utc_helpdesk < D:\HelpDesk\BE\src\database\migrations\005_add_ticket_assignees.sql"
 cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --default-character-set=utf8mb4 utc_helpdesk < D:\HelpDesk\BE\src\database\migrations\006_add_ticket_assignee_status.sql"
 cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --default-character-set=utf8mb4 utc_helpdesk < D:\HelpDesk\BE\src\database\migrations\007_add_ticket_ai_messages.sql"
+cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --default-character-set=utf8mb4 utc_helpdesk < D:\HelpDesk\BE\src\database\migrations\008_add_ticket_watchers.sql"
+cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --default-character-set=utf8mb4 utc_helpdesk < D:\HelpDesk\BE\src\database\migrations\009_add_consultation_chat.sql"
+cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --default-character-set=utf8mb4 utc_helpdesk < D:\HelpDesk\BE\src\database\migrations\010_add_consultation_inbox_state.sql"
 cmd.exe /c "C:\xampp\mysql\bin\mysql.exe --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --default-character-set=utf8mb4 utc_helpdesk < D:\HelpDesk\BE\src\database\seeders\001_seed_master_data.sql"
 ```
 

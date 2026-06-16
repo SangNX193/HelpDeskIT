@@ -6,6 +6,7 @@ function CreateTicketPage() {
     const { data: departments } = useApi("/catalog/departments", []);
     const [form, setForm] = React.useState({ title: "", description: "", departmentId: "", room: "", serviceId: "", priorityId: "" });
     const [files, setFiles] = React.useState([]);
+    const [duplicateCandidates, setDuplicateCandidates] = React.useState([]);
     const [loading, setLoading] = React.useState(false);
 
     React.useEffect(() => {
@@ -18,25 +19,80 @@ function CreateTicketPage() {
     React.useEffect(() => {
         if (departments[0] && !form.departmentId) setForm((state) => ({ ...state, departmentId: departments[0].id }));
     }, [departments]);
+    React.useEffect(() => {
+        if (duplicateCandidates.length) setDuplicateCandidates([]);
+    }, [form.title, form.description, form.departmentId, form.room, form.serviceId]);
+
+    const uploadFiles = async (ticketId) => {
+        for (const file of files) {
+            const attachment = new FormData();
+            attachment.append("file", file);
+            await api.post(`/tickets/${ticketId}/attachments`, attachment, { headers: { "Content-Type": "multipart/form-data" } });
+        }
+    };
+
+    const createNewTicket = async (allowDuplicate = false) => {
+        const { data } = await api.post("/tickets", { ...form, allowDuplicate });
+        const ticketId = data.data.id;
+
+        await uploadFiles(ticketId);
+
+        toast(files.length ? "Tạo yêu cầu và tải file thành công" : "Tạo yêu cầu thành công", "success");
+        navigate(`/requester/tickets/create/success?id=${ticketId}`);
+    };
+
+    const duplicateDetailsFromError = (error) => error?.response?.data?.details?.duplicates || [];
 
     const submit = async (event) => {
         event.preventDefault();
         setLoading(true);
         try {
-            const { data } = await api.post("/tickets", form);
-            const ticketId = data.data.id;
-
-            for (const file of files) {
-                const attachment = new FormData();
-                attachment.append("file", file);
-                await api.post(`/tickets/${ticketId}/attachments`, attachment, { headers: { "Content-Type": "multipart/form-data" } });
+            const duplicateResponse = await api.post("/tickets/duplicates", form);
+            const duplicates = duplicateResponse.data.data || [];
+            if (duplicates.length) {
+                setDuplicateCandidates(duplicates);
+                toast("Đã tìm thấy yêu cầu tương tự đang xử lý", "success");
+                return;
             }
 
-            toast(files.length ? "Tạo yêu cầu và tải file thành công" : "Tạo yêu cầu thành công", "success");
-            navigate(`/requester/tickets/create/success?id=${ticketId}`);
+            await createNewTicket(false);
+        } catch (error) {
+            const duplicates = duplicateDetailsFromError(error);
+            if (duplicates.length) {
+                setDuplicateCandidates(duplicates);
+                toast("Đã tìm thấy yêu cầu tương tự đang xử lý", "success");
+            } else {
+                toast(errorMessage(error), "error");
+                navigate("/requester/tickets/create/error");
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const followDuplicateTicket = async (ticket) => {
+        setLoading(true);
+        try {
+            await api.post(`/tickets/${ticket.id}/watch`, {
+                source: "WEB_DUPLICATE",
+                note: `Báo trùng từ form tạo yêu cầu: ${form.title}`
+            });
+            await uploadFiles(ticket.id);
+            toast("Đã gắn bạn vào yêu cầu đang xử lý", "success");
+            navigate(`/requester/tickets/${ticket.id}`);
         } catch (error) {
             toast(errorMessage(error), "error");
-            navigate("/requester/tickets/create/error");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const forceCreate = async () => {
+        setLoading(true);
+        try {
+            await createNewTicket(true);
+        } catch (error) {
+            toast(errorMessage(error), "error");
         } finally {
             setLoading(false);
         }
@@ -88,6 +144,31 @@ function CreateTicketPage() {
                         {files.map((file, index) => (
                             <LocalFilePreview key={`${file.name}-${index}`} file={file} />
                         ))}
+                    </div>
+                )}
+                {duplicateCandidates.length > 0 && (
+                    <div className="duplicate-ticket-panel">
+                        <div>
+                            <h3>Đã có yêu cầu tương tự</h3>
+                            <p className="muted">Hệ thống tìm thấy ticket cùng phòng/khu và cùng dịch vụ đang xử lý. Bạn nên theo dõi ticket sẵn có để tránh tạo trùng.</p>
+                        </div>
+                        <div className="duplicate-ticket-list">
+                            {duplicateCandidates.map((ticket) => (
+                                <div key={ticket.id} className="duplicate-ticket-item">
+                                    <div>
+                                        <strong>{ticket.code} - {ticket.title}</strong>
+                                        <p className="muted">{ticket.room ? `Phòng ${ticket.room} - ` : ""}{ticket.service_name} - {ticket.status_name} - {formatDate(ticket.created_at)}</p>
+                                        <p className="muted">Người bị ảnh hưởng: {Number(ticket.affected_count) || 1}. Độ khớp: {ticket.duplicate_score}%</p>
+                                    </div>
+                                    <button className="btn primary" type="button" disabled={loading} onClick={() => followDuplicateTicket(ticket)}>
+                                        Theo dõi ticket này
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        <button className="btn ghost" type="button" disabled={loading} onClick={forceCreate}>
+                            Vẫn tạo yêu cầu riêng
+                        </button>
                     </div>
                 )}
                 <button className="btn primary" disabled={loading || !departments.length}>{loading ? "Đang gửi..." : "Gửi yêu cầu"}</button>

@@ -3,6 +3,7 @@ function AppLayout({ children }) {
     const navigate = useNavigate();
     const location = useLocation();
     const menu = roleMenus[user?.role_code] || [];
+    const showConsultationChat = /\/dashboard$/.test(location.pathname);
 
     const handleLogout = async () => {
         await logout();
@@ -73,6 +74,7 @@ function AppLayout({ children }) {
                 </header>
                 <main className="content">{children}</main>
             </div>
+            {showConsultationChat && <ConsultationChatWidget />}
         </div>
     );
 }

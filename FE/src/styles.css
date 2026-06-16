@@ -1017,6 +1017,41 @@ a {
     gap: 12px;
 }
 
+.duplicate-ticket-panel {
+    border: 1px solid #facc15;
+    border-radius: 10px;
+    background: #fefce8;
+    padding: 14px;
+    display: grid;
+    gap: 12px;
+}
+
+.duplicate-ticket-panel h3 {
+    margin: 0 0 4px;
+    color: var(--warning);
+    font-size: 18px;
+}
+
+.duplicate-ticket-list {
+    display: grid;
+    gap: 10px;
+}
+
+.duplicate-ticket-item {
+    border: 1px solid var(--surface-line);
+    border-radius: 10px;
+    background: var(--surface-card);
+    padding: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+}
+
+.duplicate-ticket-item p {
+    margin: 4px 0 0;
+}
+
 .attachment-item {
     min-height: 122px;
     border: 1px solid var(--surface-line);
@@ -1202,6 +1237,358 @@ a {
     min-height: 48px;
 }
 
+.consultation-chat-widget {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 850;
+    pointer-events: none;
+}
+
+.consultation-chat-launcher {
+    width: 60px;
+    height: 60px;
+    border: 0;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    position: relative;
+    background: var(--primary-container);
+    color: white;
+    box-shadow: 0 16px 34px rgba(0, 31, 81, 0.28);
+    pointer-events: auto;
+}
+
+.consultation-chat-launcher .material-symbols-outlined {
+    font-size: 28px;
+    font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 28;
+}
+
+.consultation-chat-badge {
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border: 2px solid white;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    position: absolute;
+    top: -3px;
+    right: -2px;
+    background: var(--danger);
+    color: white;
+    font-size: 11px;
+    font-weight: 900;
+}
+
+.consultation-chat-panel {
+    width: min(390px, calc(100vw - 32px));
+    max-height: min(650px, calc(100vh - 112px));
+    position: absolute;
+    right: 0;
+    bottom: 76px;
+    border: 1px solid var(--surface-line);
+    border-radius: 16px;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+    background: var(--surface-card);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+    pointer-events: auto;
+}
+
+.consultation-chat-panel.staff {
+    width: min(780px, calc(100vw - 32px));
+}
+
+.consultation-chat-head {
+    min-height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--primary);
+    color: white;
+}
+
+.consultation-chat-head h2 {
+    margin: 0;
+    font-size: 18px;
+    line-height: 24px;
+}
+
+.consultation-chat-head p {
+    margin: 2px 0 0;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.consultation-chat-head .btn.ghost {
+    border-color: rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+}
+
+.consultation-chat-body {
+    min-height: 0;
+    display: grid;
+}
+
+.consultation-chat-panel.staff .consultation-chat-body {
+    grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.consultation-thread-list {
+    min-height: 0;
+    border-right: 1px solid var(--surface-line);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+    background: var(--surface-low);
+}
+
+.consultation-folder-list {
+    border-bottom: 1px solid var(--surface-line);
+    display: grid;
+    gap: 4px;
+    padding: 10px;
+    background: var(--surface-card);
+}
+
+.consultation-folder-button {
+    min-height: 38px;
+    border: 0;
+    border-radius: 8px;
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 9px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 800;
+    text-align: left;
+}
+
+.consultation-folder-button.active {
+    background: var(--primary-soft);
+    color: var(--primary);
+}
+
+.consultation-folder-button span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.consultation-folder-button strong {
+    min-width: 24px;
+    height: 22px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 31, 81, 0.08);
+    color: inherit;
+    font-size: 12px;
+}
+
+.consultation-thread-scroll {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.consultation-thread-item {
+    width: 100%;
+    min-height: 72px;
+    border: 0;
+    border-bottom: 1px solid var(--surface-line);
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+}
+
+.consultation-thread-item.active {
+    background: white;
+}
+
+.consultation-thread-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.consultation-thread-text {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+
+.consultation-thread-text strong,
+.consultation-thread-text small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.consultation-thread-text small {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.consultation-unread-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--danger);
+}
+
+.consultation-chat-main {
+    min-height: 470px;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.consultation-active-user {
+    min-height: 54px;
+    border-bottom: 1px solid var(--surface-line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px;
+    padding: 10px 14px;
+}
+
+.consultation-active-user span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.consultation-thread-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.consultation-thread-actions .btn {
+    min-height: 34px;
+    border-radius: 8px;
+    padding: 6px 9px;
+    font-size: 12px;
+}
+
+.consultation-thread-actions .material-symbols-outlined {
+    font-size: 18px;
+}
+
+.consultation-messages {
+    min-height: 0;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+    background: #f8fafc;
+}
+
+.consultation-message {
+    display: flex;
+}
+
+.consultation-message.own {
+    justify-content: flex-end;
+}
+
+.consultation-message.other {
+    justify-content: flex-start;
+}
+
+.consultation-bubble {
+    max-width: min(78%, 460px);
+    border: 1px solid var(--surface-line);
+    border-radius: 14px;
+    padding: 9px 11px;
+    background: white;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.consultation-message.own .consultation-bubble {
+    border-color: var(--primary-container);
+    background: var(--primary-container);
+    color: white;
+}
+
+.consultation-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 5px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.consultation-message.own .consultation-meta {
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.consultation-content {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+    font-size: 14px;
+}
+
+.consultation-form {
+    border-top: 1px solid var(--surface-line);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    align-items: end;
+    gap: 10px;
+    padding: 12px;
+    background: white;
+}
+
+.consultation-form textarea {
+    min-height: 44px;
+    max-height: 130px;
+    resize: vertical;
+}
+
+.consultation-send {
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--primary);
+    color: white;
+}
+
+.consultation-send:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
 .muted {
     color: var(--muted);
 }
@@ -1342,6 +1729,46 @@ a {
 
     .ticket-dispatch-grid > .field:last-child {
         max-width: none;
+    }
+
+    .consultation-chat-widget {
+        right: 16px;
+        bottom: 16px;
+    }
+
+    .consultation-chat-panel,
+    .consultation-chat-panel.staff {
+        width: calc(100vw - 32px);
+        max-height: calc(100vh - 96px);
+        bottom: 72px;
+    }
+
+    .consultation-chat-panel.staff .consultation-chat-body {
+        grid-template-columns: 1fr;
+        grid-template-rows: 230px minmax(0, 1fr);
+    }
+
+    .consultation-thread-list {
+        border-right: 0;
+        border-bottom: 1px solid var(--surface-line);
+    }
+
+    .consultation-chat-main {
+        min-height: 390px;
+    }
+
+    .consultation-active-user {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .consultation-thread-actions {
+        justify-content: flex-start;
+    }
+
+    .consultation-bubble {
+        max-width: 88%;
     }
 
     .login-visual {

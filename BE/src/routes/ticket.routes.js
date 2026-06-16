@@ -26,6 +26,13 @@ router.post(
     ticketController.createTicket
 );
 
+router.post(
+    '/duplicates',
+    roleMiddleware('REQUESTER', 'ADMIN'),
+    validateCreateTicket,
+    ticketController.checkDuplicateTickets
+);
+
 router.get(
     '/',
     roleMiddleware('MANAGER', 'ADMIN'),
@@ -63,6 +70,12 @@ router.get(
 );
 
 router.get('/:id', ticketController.getTicketById);
+
+router.post(
+    '/:id/watch',
+    roleMiddleware('REQUESTER'),
+    ticketController.watchDuplicateTicket
+);
 
 router.put(
     '/:id',

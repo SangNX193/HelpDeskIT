@@ -19,6 +19,7 @@ function TicketDetailPage() {
                         ["Trạng thái", ticket.status_name],
                         ["Ưu tiên", ticket.priority_name],
                         ["Người yêu cầu", ticket.requester_name],
+                        ["Số người bị ảnh hưởng", Number(ticket.affected_count) || 1],
                         ["Phòng cần hỗ trợ", ticket.room],
                         ["Nhân viên xử lý", ticket.assigned_support_names || ticket.assigned_to_name || "Chưa phân công"],
                         ["Tiến độ nhân viên", <AssigneeProgress ticket={ticket} />],
@@ -150,7 +151,7 @@ function AiChatPanel({ ticket }) {
             role: "USER",
             content,
             user_name: "Bạn",
-            created_at: new Date().toISOString()
+            created_at: nowAppIso()
         };
 
         setDraft("");

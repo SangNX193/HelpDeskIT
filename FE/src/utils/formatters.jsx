@@ -15,37 +15,99 @@ const REPORT_PRESETS = [
     { value: "ALL", label: "Tất cả" }
 ];
 
+const APP_TIME_ZONE = "Asia/Ho_Chi_Minh";
+const APP_TIME_OFFSET = "+07:00";
+const DATE_WITH_ZONE_PATTERN = /[zZ]|[+-]\d{2}:?\d{2}$/;
+
+const appDateInputFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+});
+
+function parseAppDate(value) {
+    if (!value) return null;
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+    const text = String(value).trim();
+    if (!text) return null;
+
+    if (DATE_WITH_ZONE_PATTERN.test(text)) {
+        const zonedDate = new Date(text);
+        return Number.isNaN(zonedDate.getTime()) ? null : zonedDate;
+    }
+
+    const normalized = text.includes("T") ? text : text.replace(" ", "T");
+    const hasTime = /\d{1,2}:\d{2}/.test(normalized);
+    const date = new Date(`${normalized}${hasTime ? "" : "T00:00:00"}${APP_TIME_OFFSET}`);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function dateInputParts(value = new Date()) {
+    const date = parseAppDate(value);
+    if (!date) return null;
+
+    return appDateInputFormatter.formatToParts(date).reduce((parts, part) => {
+        if (part.type !== "literal") parts[part.type] = part.value;
+        return parts;
+    }, {});
+}
+
+function addDaysToInputDate(value, days) {
+    const date = parseAppDate(`${value}T00:00:00`);
+    if (!date) return "";
+    date.setUTCDate(date.getUTCDate() + days);
+    return dateInputValue(date);
+}
+
+function nowAppIso() {
+    const date = new Date();
+    const parts = dateInputParts(date);
+    if (!parts) return date.toISOString();
+
+    const timeParts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: APP_TIME_ZONE,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    }).formatToParts(date).reduce((values, part) => {
+        if (part.type !== "literal") values[part.type] = part.value;
+        return values;
+    }, {});
+
+    return `${parts.year}-${parts.month}-${parts.day}T${timeParts.hour}:${timeParts.minute}:${timeParts.second}${APP_TIME_OFFSET}`;
+}
+
 function reportRangeForPreset(preset = "30D") {
-    const today = new Date();
+    const today = dateInputValue(new Date());
 
     if (preset === "ALL") {
         return { preset, fromDate: "", toDate: "" };
     }
 
     if (preset === "MONTH") {
+        const parts = dateInputParts(new Date());
         return {
             preset,
-            fromDate: dateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)),
-            toDate: dateInputValue(today)
+            fromDate: parts ? `${parts.year}-${parts.month}-01` : today,
+            toDate: today
         };
     }
 
     const days = preset === "7D" ? 7 : 30;
-    const from = new Date(today);
-    from.setDate(today.getDate() - days + 1);
 
     return {
         preset,
-        fromDate: dateInputValue(from),
-        toDate: dateInputValue(today)
+        fromDate: addDaysToInputDate(today, -days + 1),
+        toDate: today
     };
 }
 
 function dateInputValue(date) {
-    const safeDate = new Date(date);
-    if (Number.isNaN(safeDate.getTime())) return "";
-    safeDate.setMinutes(safeDate.getMinutes() - safeDate.getTimezoneOffset());
-    return safeDate.toISOString().slice(0, 10);
+    const parts = dateInputParts(date);
+    return parts ? `${parts.year}-${parts.month}-${parts.day}` : "";
 }
 
 function reportQueryString(range) {
@@ -118,13 +180,13 @@ function normalizeSearchValue(value) {
 
 function filterTicketsByRange(tickets, range) {
     const safeTickets = Array.isArray(tickets) ? tickets : [];
-    const fromTime = range.fromDate ? new Date(`${range.fromDate}T00:00:00`).getTime() : -Infinity;
-    const toTime = range.toDate ? new Date(`${range.toDate}T23:59:59`).getTime() : Infinity;
 
     return safeTickets.filter((ticket) => {
-        const createdAt = new Date(ticket.created_at).getTime();
-        if (!Number.isFinite(createdAt)) return false;
-        return createdAt >= fromTime && createdAt <= toTime;
+        const createdDate = dateInputValue(ticket.created_at);
+        if (!createdDate) return false;
+        if (range.fromDate && createdDate < range.fromDate) return false;
+        if (range.toDate && createdDate > range.toDate) return false;
+        return true;
     });
 }
 
@@ -285,8 +347,8 @@ function averageNumbers(values) {
 
 function minutesBetween(start, end) {
     if (!start || !end) return null;
-    const startTime = new Date(start).getTime();
-    const endTime = new Date(end).getTime();
+    const startTime = parseAppDate(start)?.getTime();
+    const endTime = parseAppDate(end)?.getTime();
     if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return null;
     return Math.max(0, Math.round((endTime - startTime) / 60000));
 }
@@ -313,9 +375,9 @@ function formatMinutes(value) {
 
 function formatDateOnly(value) {
     if (!value) return "-";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short" }).format(date);
+    const date = parseAppDate(value);
+    if (!date) return value;
+    return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeZone: APP_TIME_ZONE }).format(date);
 }
 
 function statusClassName(statusCode) {
@@ -335,15 +397,18 @@ function isHandledTicket(ticket) {
 }
 
 function isOverdue(ticket) {
-    return ticket.due_resolve_at && new Date(ticket.due_resolve_at) < new Date() && !isClosed(ticket);
+    const dueDate = parseAppDate(ticket.due_resolve_at);
+    return dueDate && dueDate.getTime() < Date.now() && !isClosed(ticket);
 }
 
 function isLateResolved(ticket) {
-    return ticket.resolved_at && ticket.due_resolve_at && new Date(ticket.resolved_at) > new Date(ticket.due_resolve_at);
+    const resolvedAt = parseAppDate(ticket.resolved_at);
+    const dueDate = parseAppDate(ticket.due_resolve_at);
+    return resolvedAt && dueDate && resolvedAt.getTime() > dueDate.getTime();
 }
 
 function ticketEditInfo(ticket, now = Date.now()) {
-    const createdAt = new Date(ticket?.created_at).getTime();
+    const createdAt = parseAppDate(ticket?.created_at)?.getTime();
     const expiresAt = createdAt + 5 * 60 * 1000;
     const remainingMs = Number.isFinite(createdAt) ? Math.max(0, expiresAt - now) : 0;
     const isInTime = remainingMs > 0;
@@ -369,9 +434,9 @@ function formatCountdown(ms) {
 
 function formatDate(value) {
     if (!value) return "-";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(date);
+    const date = parseAppDate(value);
+    if (!date) return value;
+    return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "medium", timeZone: APP_TIME_ZONE }).format(date);
 }
 
 function mediaUrl(value) {

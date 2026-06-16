@@ -7,6 +7,7 @@ const morgan = require('morgan');
 const authRoutes = require('./routes/auth.routes');
 const ticketRoutes = require('./routes/ticket.routes');
 const notificationRoutes = require('./routes/notification.routes');
+const consultationRoutes = require('./routes/consultation.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const reportRoutes = require('./routes/report.routes');
 const adminRoutes = require('./routes/admin.routes');
@@ -74,6 +75,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/consultations', consultationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api', supportRoutes);
